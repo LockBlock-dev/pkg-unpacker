@@ -1,0 +1,19 @@
+{
+    "name": "pkg-unpacker",
+    "version": "1.0.0",
+    "description": "Unpack any pkg application",
+    "main": "unpack.js",
+    "dependencies": {
+        "minimist": "^1.2.6"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/LockBlock-dev/pkg-unpacker.git"
+    },
+    "author": "LockBlock-dev",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/LockBlock-dev/pkg-unpacker/issues"
+    },
+    "homepage": "https://github.com/LockBlock-dev/pkg-unpacker#readme"
+}
