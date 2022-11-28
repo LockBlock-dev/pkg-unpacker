@@ -73,6 +73,16 @@ const DICT = props.filesDict;
 const VIRTUAL_FILESYSTEM = props.vfs;
 const SYMLINKS = props.symlinks;
 
+const file = fs.readFileSync(argv.i);
+const idx = file.indexOf(Buffer.from("var PAYLOAD_POSITION = "));
+
+if (idx === -1) throw new Error(`Cannot find the pkg payload! ${READ_ERR}`);
+
+let payload = file.slice(idx);
+payload = payload.slice(0, payload.indexOf(Buffer.from("\n")));
+
+const PAYLOAD_POSITION = Number(payload.toString().match(/\d+/)[0]);
+
 // /////////////////////////////////////////////////////////////////
 // PKG CODE https://github.com/vercel/pkg //////////////////////////
 // /////////////////////////////////////////////////////////////////
@@ -222,20 +232,9 @@ const reverseLinks = (path_) => {
     return path_;
 };
 
-const getFile = (binPath, [startPos, size]) => {
-    const fd = fs.openSync(binPath, "r");
-    const file = fs.readFileSync(binPath);
+const getFile = (fd, [startPos, size]) => {
+
     let code = Buffer.alloc(size);
-    const placeholder = "var PAYLOAD_POSITION = ";
-    const idx = file.indexOf(Buffer.from(placeholder));
-
-    if (idx === -1) throw new Error(`Cannot find the pkg payload! ${READ_ERR}`);
-
-    let payload = file.slice(idx);
-    payload = payload.slice(0, payload.indexOf(Buffer.from("\n")));
-
-    const PAYLOAD_POSITION = Number(payload.toString().match(/\d+/)[0]);
-
     fs.readSync(fd, code, 0, size, PAYLOAD_POSITION + startPos);
 
     try {
@@ -284,22 +283,22 @@ let exec = false;
 
 console.log(`Unpacking, ${Object.keys(VIRTUAL_FILESYSTEM).length} elements to go...`);
 
+const STORE_BLOB = "0";
+const STORE_CONTENT = "1";
+const fd = fs.openSync(argv.i, "r");
+
 for (let path in VIRTUAL_FILESYSTEM) {
     if (DOCOMPRESS) path = toOriginal(reverseLinks(path));
 
     const vfs = findVirtualFileSystemEntry(path);
     let blob;
 
-    if (vfs["0"]) {
-        blob = getFile(argv.i, vfs["0"]);
+    if (vfs[STORE_BLOB] || vfs[STORE_CONTENT]) {
+        blob = getFile(fd, vfs[STORE_CONTENT] || vfs[STORE_BLOB]);
 
         if (argv.run && path === props.entryPoint) {
             exec = executeFile(blob);
         }
-
-        writeFile(path, argv.o, blob);
-    } else if (vfs["1"]) {
-        blob = getFile(argv.i, vfs["1"]);
 
         writeFile(path, argv.o, blob);
     }
