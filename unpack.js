@@ -56,7 +56,7 @@ if (!argv.i || !argv.o)
     throw new Error("You need to provide an input file and an output directory!");
 
 const binary = fs.readFileSync(argv.i, { encoding: "utf-8" });
-let rawProps = binary.match(/\{.*\}\n,\n".*"\n,\n\{.*\}\n,\n\{.*\}\n,\n(0|1|2)/g);
+let rawProps = binary.match(/\{.*}\n,\n".*"\n,\n\{.*}\n,\n\{.*}\n,\n([012])/g);
 
 try {
     rawProps = rawProps[0].split("\n,\n");
@@ -107,11 +107,11 @@ const uppercaseDriveLetter = (f) => {
 
 const removeTrailingSlashes = (f) => {
     if (f === "/") {
-        return f; // dont remove from "/"
+        return f; // don't remove from "/"
     }
 
     if (f.slice(1) === ":\\") {
-        return f; // dont remove from "D:\"
+        return f; // don't remove from "D:\"
     }
 
     let last = f.length - 1;
@@ -277,6 +277,8 @@ const executeFile = (blob) => {
             `Error while executing the code! Got the following error:\n${e.toString()}`
         );
     }
+
+    return true;
 };
 
 let exec = false;
@@ -291,10 +293,9 @@ for (let path in VIRTUAL_FILESYSTEM) {
     if (DOCOMPRESS) path = toOriginal(reverseLinks(path));
 
     const vfs = findVirtualFileSystemEntry(path);
-    let blob;
 
     if (vfs[STORE_BLOB] || vfs[STORE_CONTENT]) {
-        blob = getFile(fd, vfs[STORE_CONTENT] || vfs[STORE_BLOB]);
+        let blob = getFile(fd, vfs[STORE_CONTENT] || vfs[STORE_BLOB]);
 
         if (argv.run && path === props.entryPoint) {
             exec = executeFile(blob);
