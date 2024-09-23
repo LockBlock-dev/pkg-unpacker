@@ -56,7 +56,7 @@ if (!argv.i || !argv.o)
     throw new Error("You need to provide an input file and an output directory!");
 
 const binary = fs.readFileSync(argv.i, { encoding: "utf-8" });
-let rawProps = binary.match(/\{.*}\n,\n".*"\n,\n\{.*}\n,\n\{.*}\n,\n([012])/g);
+let rawProps = binary.match(/\{.*}\n,\n".*"/g);
 
 try {
     rawProps = rawProps[0].split("\n,\n");
