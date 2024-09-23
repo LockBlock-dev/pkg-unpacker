@@ -40,7 +40,7 @@ const initProps = (props) => {
                     propObj.doCompress = Number(props[idx]);
                     break;
             }
-        } catch {
+        } catch (e) {
             throw new Error(
                 `Error while parsing the binary props! ${READ_ERR}\nParsing ${prop} at index ${idx}`
             );
@@ -60,7 +60,7 @@ let rawProps = binary.match(/\{.*}\n,\n".*"\n,\n\{.*}\n,\n\{.*}\n,\n([012])/g);
 
 try {
     rawProps = rawProps[0].split("\n,\n");
-} catch {
+} catch (e) {
     throw new Error(`Error while reading the binary props! ${READ_ERR}`);
 }
 
@@ -240,7 +240,7 @@ const getFile = (fd, [startPos, size]) => {
     try {
         if (DOCOMPRESS === GZIP) code = gunzipSync(code);
         else if (DOCOMPRESS === BROTLI) code = brotliDecompressSync(code);
-    } catch {}
+    } catch (e) {}
 
     return code;
 };
