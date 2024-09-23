@@ -25,7 +25,7 @@ const initProps = (props) => {
                     break;
                 case 1:
                     prop = "entryPoint";
-                    propObj.entryPoint = props[idx].replaceAll(`"`, "");
+                    propObj.entryPoint = props[idx].replace(/"/g, "");
                     break;
                 case 2:
                     prop = "symlinks";
