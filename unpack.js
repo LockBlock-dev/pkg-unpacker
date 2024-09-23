@@ -245,12 +245,29 @@ const getFile = (fd, [startPos, size]) => {
     return code;
 };
 
+const mkdirRecursiveSync = (targetDir) => {
+  const sep = path.sep; // path separator (usually '\' on Windows and '/' on Linux)
+  const initDir = path.isAbsolute(targetDir) ? sep : ''; // if the path is absolute, start from root, else empty string
+  const baseDir = '.';
+
+  // Split the path and reduce through it, creating one directory at a time
+  targetDir.split(sep).reduce((parentDir, childDir) => {
+    const currentDir = path.resolve(parentDir, childDir);
+
+    if (!fs.existsSync(currentDir)) {
+      fs.mkdirSync(currentDir);
+    }
+
+    return currentDir;
+  }, initDir || baseDir);
+}
+
 const writeFile = (vfsPath, outputPath, blob) => {
     if (vfsPath.startsWith("C:")) vfsPath = vfsPath.replace("C:", "");
 
     outputPath = path.join(path.resolve(outputPath), vfsPath);
 
-    if (!fs.existsSync(outputPath)) fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    if (!fs.existsSync(outputPath)) mkdirRecursiveSync(path.dirname(outputPath));
 
     fs.writeFileSync(outputPath, blob);
 };
