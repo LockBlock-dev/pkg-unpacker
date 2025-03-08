@@ -2,82 +2,154 @@
 
 Unpack any [pkg](https://github.com/vercel/pkg) application.
 
-Keep in mind that <span style="color:red">this doesn't give you the full source code if the application was compiled into V8 bytecode</span>. See [How it works](#how-it-works).
+Keep in mind that **this tool doesn't give you the full source code if the application was compiled into V8 bytecode**. See [How it works](#how-it-works).
 
 This should work with any pkg application, but errors may occur.
 
 This app may broke at any pkg major update.
 
+## Table of Contents
+
+-   [Installation](#installation)
+-   [Usage](#usage)
+    -   [As a command line interface](#as-a-command-line-interface)
+    -   [As a library](#as-a-library)
+-   [Features](#features)
+-   [How it works](#how-it-works)
+-   [Credits](#credits)
+-   [Copyright](#copyright)
+
 ## Installation
 
--   Install [NodeJS](https://nodejs.org).
--   Download or clone the project.
--   Go to the `pkg-unpacker` folder and run `npm install`.
+1. Install [Node.js](https://nodejs.org/).
+2. Download or clone the project.
+3. Navigate to the project directory.
+4. Install the dependencies:
+    ```sh
+    npm install
+    ```
+5. Build the project:
+    ```sh
+    npm run build
+    ```
 
 ## Usage
 
+### As a command line interface
+
+To start the application, run:
+
+```sh
+npm start
+```
+
+Here’s an overview of the `help` command output:
+
 ```console
-node unpack.js [options]
+Usage: pkg-unpacker [options]
 
-  Options:
+Options:
+  -i, --input <file>     Specify the input binary file path
+  -o, --output <folder>  Specify the output folder path (default: ".")
+  --run                  Run the unpacked binary (default: false)
+  -h, --help             display help for command
+```
 
-    -i        input file name / path to the input file
-    -o        output file name / path to the output file
-    --run     try to run the entrypoint of the app
+#### Examples:
 
-  Examples:
+-   Unpack a UNIX application:
 
-  – Unpack an UNIX app
-    $ node unpack.js -i ./pkg_app -o ./unpacked
-  – Unpack a Windows app
-    $ node unpack.js -i ./pkg_app.exe -o ./unpacked
-  – Unpack an UNIX app and run it
-    $ node unpack.js -i ./pkg_app -o ./unpacked --run
+```console
+$ npm start -i ./pkg_app -o ./unpacked
+```
+
+-   Unpack a Windows application:
+
+```console
+$ npm start -i ./pkg_app.exe -o ./unpacked
+```
+
+-   Unpack a UNIX application and run it:
+
+```console
+$ npm start -i ./pkg_app -o ./unpacked --run
+```
+
+### As a library
+
+The main logic of **pkg unpacker** lies in the [`Unpacker`](./src/unpacker.ts) class.
+
+#### Examples:
+
+-   Unpack a UNIX application:
+
+```ts
+import Unpacker from "./src/unpacker.ts";
+
+const main = async () => {
+    const unpacker = await Unpacker.create("./pkg_app");
+    await unpacker.unpack("./unpacked");
+};
+
+main();
+```
+
+-   Unpack a Windows application and run it:
+
+```ts
+import Unpacker from "./src/unpacker.ts";
+
+const main = async () => {
+    const unpacker = await Unpacker.create("./pkg_app.exe");
+    await unpacker.unpack("./unpacked", true);
+};
+
+main();
 ```
 
 ## Features
 
--   Compression detection (Gzip, Brotli)
--   Code evaluation
--   Symlink handling
--   Unpack binaries of all operating systems
+-   Detects compression formats (Gzip, Brotli)
+-   Supports code evaluation
+-   Handles symlinks
+-   Extracts binaries from all operating systems
 
 ## How it works
 
-This application **DOES NOT** decompile any code. By default [pkg](https://github.com/vercel/pkg) compiles code to V8 bytecode. Extracted files will remain in this format except for assets.
+This application does not decompile code. By default, [pkg](https://github.com/vercel/pkg) compiles JavaScript into V8 bytecode. Extracted files will remain in this format, except for assets.
 
-Code evaluation works best with small applications. Requirements can be broken.
+Code evaluation works best with small applications as dependencies might be broken.
 
-[pkg](https://github.com/vercel/pkg) writes the file name, path, offset, length and compression at the bottom of each binary. This application analyzes these fields, then extracts and decompresses (if compressed) all the files of the binary.
+[pkg](https://github.com/vercel/pkg) stores metadata about file names, paths, offsets, lengths, and compression at the end of each binary. This application analyzes those fields to extract and decompress (if necessary) all embedded files.
 
 Examples:
 
 ```js
-//UNIX app
+// UNIX app
 
-{"/snapshot/pkg/index.js":{"0":[0,568],"3":[568,118]},"/snapshot/pkg":{"2":[686,12],"3":[698,117]},"/snapshot":{"2":[815,7],"3":[822,117]}} //virtual file system
+{"/snapshot/pkg/index.js":{"0":[0,568],"3":[568,118]},"/snapshot/pkg":{"2":[686,12],"3":[698,117]},"/snapshot":{"2":[815,7],"3":[822,117]}} // virtual file system
 ,
-"/snapshot/pkg/index.js" //entrypoint
+"/snapshot/pkg/index.js" // entrypoint
 ,
-{} //symlinks
+{} // symlinks
 ,
-{} //files dictionnary
+{} // files dictionnary
 ,
-0 //0: no compression, 1: Gzip, 2: Brotli
+0 // 0: no compression, 1: Gzip, 2: Brotli
 ```
 
 ```js
-//Windows app
+// Windows app
 
-{"C:\\snapshot\\pkg\\index.js":{"0":[0,568],"3":[568,118]},"C:\\snapshot\\pkg":{"2":[686,12],"3":[698,117]},"C:\\snapshot":{"2":[815,7],"3":[822,117]}} //virtual file system
+{"C:\\snapshot\\pkg\\index.js":{"0":[0,568],"3":[568,118]},"C:\\snapshot\\pkg":{"2":[686,12],"3":[698,117]},"C:\\snapshot":{"2":[815,7],"3":[822,117]}} // virtual file system
 ,
-"C:\\snapshot\\pkg\\index.js" //entrypoint
+"C:\\snapshot\\pkg\\index.js" // entrypoint
 ,
-{} //symlinks
+{} // symlinks
 ,
-{} //files dictionnary
+{} // files dictionnary
 ,
-0 //0: no compression, 1: Gzip, 2: Brotli
+0 // 0: no compression, 1: Gzip, 2: Brotli
 ```
 
 ## Credits
