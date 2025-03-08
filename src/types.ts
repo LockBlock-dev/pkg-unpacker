@@ -7,8 +7,8 @@ export enum CompressionType {
 export enum StoreType {
     BLOB,
     CONTENT,
-    DIRECTORY,
-    FILE_INFO,
+    LINKS,
+    STAT,
 }
 
 export interface Props {

@@ -1,15 +1,12 @@
 # pkg unpacker
 
-Unpack any [pkg](https://github.com/vercel/pkg) application.
+Unpack any **pkg** application.
 
 Keep in mind that **this tool doesn't give you the full source code if the application was compiled into V8 bytecode**. See [How it works](#how-it-works).
 
-This should work with any pkg application, but errors may occur.
-
-This app may broke at any pkg major update.
-
 ## Table of Contents
 
+-   [Support](#support)
 -   [Installation](#installation)
 -   [Usage](#usage)
     -   [As a command line interface](#as-a-command-line-interface)
@@ -18,6 +15,16 @@ This app may broke at any pkg major update.
 -   [How it works](#how-it-works)
 -   [Credits](#credits)
 -   [Copyright](#copyright)
+
+## Support
+
+As of this writing, **pkg-unpacker** supports the following tools:
+
+| Tool                                            | Supported | Versions      | Comment                                                                                                            |
+| ----------------------------------------------- | --------- | ------------- | ------------------------------------------------------------------------------------------------------------------ |
+| [vercel/pkg](https://github.com/vercel/pkg)     | ✅        | 5.3.0 - 5.8.1 | N/A                                                                                                                |
+| [yao-pkg/pkg](https://github.com/yao-pkg/pkg)   | ✅        | 5.3.0 - 5.8.1 | Does not include experimental support for [Node SEA](https://nodejs.org/api/single-executable-applications.html) . |
+| [AngaBlue/exe](https://github.com/AngaBlue/exe) | ❌        | -             | N/A                                                                                                                |
 
 ## Installation
 

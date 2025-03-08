@@ -255,7 +255,7 @@ class Unpacker {
                 return await brotliDecompress(buf);
         } catch {}
 
-        return null;
+        return buf;
     }
 
     private async writeFile(path_: string, blob: Buffer<ArrayBufferLike>) {
@@ -296,6 +296,10 @@ class Unpacker {
         outputFolder: string = ".",
         shouldRun: boolean = false,
     ) {
+        console.log(
+            `Detected compression: ${CompressionType[this.props.doCompress]}`,
+        );
+        console.log(`Detected entrypoint: ${this.props.entryPoint}`);
         console.log(
             `Unpacking your binary, ${
                 Object.keys(this.props.vfs).length
