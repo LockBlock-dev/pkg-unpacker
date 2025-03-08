@@ -3,7 +3,13 @@ import fs, { type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { Script } from "node:vm";
 
-import { C_DISK, IS_WIN32, SEPARATOR } from "./constants";
+import {
+    C_DISK,
+    IS_WIN32,
+    SEPARATOR,
+    RAW_PROPS_REGEX,
+    OLD_SEPARATOR,
+} from "./constants";
 import { UnpackerReadError } from "./errors";
 import { CompressionType, StoreType, type Props } from "./types";
 import { gunzip, brotliDecompress } from "./utils";
@@ -35,9 +41,7 @@ class Unpacker {
 
     static async create(filePath: string) {
         const binary = await fs.readFile(filePath, { encoding: "utf-8" });
-        let rawProps = binary.match(
-            /\{.*}\n,\n".*"\n,\n\{.*}\n,\n\{.*}\n,\n([012])/g,
-        );
+        let rawProps = binary.match(RAW_PROPS_REGEX);
 
         if (!rawProps || !rawProps.length)
             throw new UnpackerReadError(
@@ -65,15 +69,19 @@ class Unpacker {
     }
 
     private static initProps(rawProps: string[]) {
-        if (rawProps.length < Object.keys(propsMapping).length) {
+        // Account for older versions without filesDict and doCompress
+        if (rawProps.length < Object.keys(propsMapping).length - 2)
             throw new UnpackerReadError("Missing required props!");
-        }
 
-        return Object.entries(propsMapping).reduce<Props>(
-            (result, [key, transform], idx) => {
+        const transforms = Object.entries(propsMapping);
+
+        return rawProps.reduce<Props>(
+            (result, rawProp, idx) => {
+                const [key, transform] = transforms[idx];
+
                 try {
                     //@ts-expect-error TypeScript issue
-                    result[key] = transform(rawProps[idx]);
+                    result[key] = transform(rawProp);
                 } catch {
                     throw new UnpackerReadError(
                         `Error parsing ${key} at index ${idx}.`,
@@ -82,7 +90,9 @@ class Unpacker {
 
                 return result;
             },
-            { ...EMPTY_PROPS },
+            {
+                ...EMPTY_PROPS,
+            },
         );
     }
 
@@ -91,9 +101,13 @@ class Unpacker {
         this.payloadPosition = payloadPosition;
         this.props = props;
         this.symlinksEntries = Object.entries(props.symlinks);
-        this.separator = props.doCompress ? SEPARATOR : path.sep;
         this.dictRev = {};
         this.maxKey = Object.values(props.filesDict).length;
+
+        let [firstEntry] = Object.keys(this.props.vfs);
+
+        if (firstEntry.includes(OLD_SEPARATOR)) this.separator = OLD_SEPARATOR;
+        else this.separator = props.doCompress ? SEPARATOR : path.sep;
 
         Object.entries(props.filesDict).forEach(([k, v]) => {
             this.dictRev[v] = k;
@@ -173,16 +187,17 @@ class Unpacker {
         const a = normalizedPath
             .split(slash)
             .map((p) => this.replace(p))
-            .join(SEPARATOR);
+            .join(this.separator);
 
         return a || normalizedPath;
     }
 
     private toOriginal(fShort: string) {
-        if (!this.props.doCompress) return fShort;
+        if (!this.props.doCompress && this.separator !== OLD_SEPARATOR)
+            return fShort;
 
         return fShort
-            .split(SEPARATOR)
+            .split(this.separator)
             .map((x) => this.dictRev[x])
             .join(path.sep);
     }
@@ -216,7 +231,9 @@ class Unpacker {
         return this.props.vfs[vfsKey];
     }
 
-    private reverseLinks(path_: string) {
+    private normalizePathAndFollowLink(path_: string) {
+        path_ = this.normalizePath(path_);
+
         let needToSubstitute = true;
 
         while (needToSubstitute) {
@@ -312,9 +329,12 @@ class Unpacker {
 
         for (let path_ in this.props.vfs) {
             if (this.props.doCompress)
-                path_ = this.toOriginal(this.reverseLinks(path_));
+                path_ = this.toOriginal(this.normalizePathAndFollowLink(path_));
 
             const vfsEntry = this.findVirtualFileSystemEntry(path_);
+
+            if (!this.props.doCompress && this.separator === OLD_SEPARATOR)
+                path_ = this.toOriginal(this.normalizePathAndFollowLink(path_));
 
             if (
                 !(StoreType.BLOB.toString() in vfsEntry) &&
