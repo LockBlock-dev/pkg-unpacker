@@ -23,7 +23,7 @@ As of this writing, **pkg-unpacker** supports the following tools:
 | Tool                                            | Supported | Versions      | Comment                                                                                                            |
 | ----------------------------------------------- | --------- | ------------- | ------------------------------------------------------------------------------------------------------------------ |
 | [vercel/pkg](https://github.com/vercel/pkg)     | ✅        | 5.3.0 - 5.8.1 | N/A                                                                                                                |
-| [yao-pkg/pkg](https://github.com/yao-pkg/pkg)   | ✅        | 5.3.0 - 5.8.1 | Does not include experimental support for [Node SEA](https://nodejs.org/api/single-executable-applications.html) . |
+| [yao-pkg/pkg](https://github.com/yao-pkg/pkg)   | ✅        | 5.3.0 - 6.3.2 | Does not include experimental support for [Node SEA](https://nodejs.org/api/single-executable-applications.html) . |
 | [AngaBlue/exe](https://github.com/AngaBlue/exe) | ❌        | -             | N/A                                                                                                                |
 
 ## Installation
