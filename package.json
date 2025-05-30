@@ -7,7 +7,8 @@
     "license": "MIT",
     "scripts": {
         "start": "node dist/main.js",
-        "build": "tsc"
+        "build": "tsc",
+        "test": "tsc && node --test dist/**/*.test.js"
     },
     "repository": {
         "type": "git",

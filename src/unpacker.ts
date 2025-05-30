@@ -35,6 +35,7 @@ class Unpacker {
     private payloadPosition: number;
     private symlinksEntries: Array<[string, string]>;
     private separator: string;
+    private nativeSeprator: typeof path.sep;
     private dictRev: Record<string, string>;
     private maxKey: number;
     private props: Props;
@@ -108,6 +109,10 @@ class Unpacker {
 
         if (firstEntry.includes(OLD_SEPARATOR)) this.separator = OLD_SEPARATOR;
         else this.separator = props.doCompress ? SEPARATOR : path.sep;
+
+        this.nativeSeprator = this.props.entryPoint.includes(C_DISK)
+            ? "\\"
+            : "/";
 
         Object.entries(props.filesDict).forEach(([k, v]) => {
             this.dictRev[v] = k;
@@ -199,11 +204,11 @@ class Unpacker {
         return fShort
             .split(this.separator)
             .map((x) => this.dictRev[x])
-            .join(path.sep);
+            .join(this.nativeSeprator);
     }
 
     private findVirtualFileSystemKeyAndFollowLinks(path_: string) {
-        let vfsKey = this.findVirtualFileSystemKey(path_, path.sep);
+        let vfsKey = this.findVirtualFileSystemKey(path_, this.nativeSeprator);
         let needToSubstitute = true;
 
         while (needToSubstitute) {
@@ -231,9 +236,7 @@ class Unpacker {
         return this.props.vfs[vfsKey];
     }
 
-    private normalizePathAndFollowLink(path_: string) {
-        path_ = this.normalizePath(path_);
-
+    private reverseLinks(path_: string) {
         let needToSubstitute = true;
 
         while (needToSubstitute) {
@@ -329,12 +332,20 @@ class Unpacker {
 
         for (let path_ in this.props.vfs) {
             if (this.props.doCompress)
-                path_ = this.toOriginal(this.normalizePathAndFollowLink(path_));
+                path_ = this.toOriginal(
+                    this.reverseLinks(
+                        this.separator === OLD_SEPARATOR
+                            ? this.normalizePath(path_)
+                            : path_,
+                    ),
+                );
 
             const vfsEntry = this.findVirtualFileSystemEntry(path_);
 
             if (!this.props.doCompress && this.separator === OLD_SEPARATOR)
-                path_ = this.toOriginal(this.normalizePathAndFollowLink(path_));
+                path_ = this.toOriginal(
+                    this.reverseLinks(this.normalizePath(path_)),
+                );
 
             if (
                 !(StoreType.BLOB.toString() in vfsEntry) &&
