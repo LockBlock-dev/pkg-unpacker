@@ -4,6 +4,7 @@ import path from "node:path";
 import process from "node:process";
 
 import Unpacker from "./unpacker.js";
+import { isBun } from "./utils.js";
 import { VERSION } from "./version.js";
 
 class Cli {
@@ -34,6 +35,13 @@ class Cli {
 
         if (!options.input || !options.output) {
             console.error("Both -i (input) and -o (output) are required.");
+            process.exit(1);
+        }
+
+        if (options.run && isBun()) {
+            console.error(
+                "--run is not supported under Bun: the entrypoint is V8 bytecode and Bun runs JavaScriptCore.",
+            );
             process.exit(1);
         }
 

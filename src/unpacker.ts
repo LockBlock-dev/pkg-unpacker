@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import fs, { type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { Script } from "node:vm";
@@ -14,7 +13,7 @@ import {
 } from "./constants.js";
 import { UnpackerReadError } from "./errors.js";
 import { CompressionType, StoreType, type Props } from "./types.js";
-import { gunzip, brotliDecompress, zstdDecompress } from "./utils.js";
+import { gunzip, brotliDecompress, zstdDecompress, isBun, parseStatMode } from "./utils.js";
 
 const EMPTY_PROPS: Props = {
     vfs: {},
@@ -39,11 +38,11 @@ class Unpacker {
     private separator: string;
     private nativeSeparator: typeof path.sep;
     private dictRev: Record<string, string>;
+    private symlinkLinks = new Map<string, string>();
     private maxKey: number;
     private props: Props;
 
     static async create(filePath: string) {
-        // Props and payload marker live at the binary tail: scan it first.
         const handle = await fs.open(filePath, "r");
 
         try {
@@ -90,7 +89,6 @@ class Unpacker {
             let file: Buffer;
 
             if (markerIdx === -1) {
-                // Marker sits before the scanned tail: fall back to a full read.
                 file = await handle.readFile();
                 markerIdx = file.indexOf(PAYLOAD_MARKER);
             } else {
@@ -166,8 +164,6 @@ class Unpacker {
         fd: FileHandle,
         props: Props,
     ) {
-        // Fallback for binaries whose placeholder was left unpatched: scan
-        // for padded numbers and keep the one that decodes a stat entry.
         const { size } = await fd.stat();
         const file = Buffer.alloc(size);
 
@@ -207,9 +203,7 @@ class Unpacker {
                     JSON.parse(text);
 
                     return candidate;
-                } catch {
-                    // Not a payload position, try the next candidate.
-                }
+                } catch {}
             }
         }
 
@@ -236,6 +230,9 @@ class Unpacker {
         Object.entries(props.filesDict).forEach(([k, v]) => {
             this.dictRev[v] = k;
         });
+
+        for (const [link, target] of this.symlinksEntries)
+            this.symlinkLinks.set(this.toOriginal(link), this.toOriginal(target));
     }
 
     private uppercaseDriveLetter(f: string) {
@@ -308,7 +305,6 @@ class Unpacker {
 
         return fShort
             .split(this.separator)
-            // Keep unknown segments as-is instead of joining "undefined".
             .map((x) => this.dictRev[x] ?? x)
             .join(this.nativeSeparator);
     }
@@ -334,6 +330,16 @@ class Unpacker {
         }
 
         return vfsKey;
+    }
+
+    private remapSymlinkTarget(target: string, outputPath: string) {
+        if (
+            target.startsWith("/snapshot/") ||
+            /^[A-Za-z]:\\snapshot\\/i.test(target)
+        )
+            return path.join(outputPath, target.replace(C_DISK, ""));
+
+        return target;
     }
 
     private findVirtualFileSystemEntry(path_: string) {
@@ -382,7 +388,6 @@ class Unpacker {
             else if (this.props.doCompress === CompressionType.ZSTD)
                 return await zstdDecompress(buf);
         } catch (e) {
-            // Entry stored raw: fall back to the uncompressed bytes.
             console.debug(
                 `Decompression failed, using raw bytes: ${
                     e instanceof Error ? e.message : e
@@ -393,10 +398,17 @@ class Unpacker {
         return buf;
     }
 
-    private async writeFile(path_: string, blob: Buffer<ArrayBufferLike>) {
-        const dir = path.dirname(path_);
+    private createdDirs = new Set<string>();
 
-        if (!existsSync(dir)) await fs.mkdir(dir, { recursive: true });
+    private async ensureDir(dir: string) {
+        if (!this.createdDirs.has(dir)) {
+            await fs.mkdir(dir, { recursive: true });
+            this.createdDirs.add(dir);
+        }
+    }
+
+    private async writeFile(path_: string, blob: Buffer<ArrayBufferLike>) {
+        await this.ensureDir(path.dirname(path_));
 
         await fs.writeFile(path_, blob);
     }
@@ -409,6 +421,12 @@ class Unpacker {
             sourceless: true,
         };
         const script = new Script("", options);
+
+        if (script.cachedDataRejected)
+            throw new Error(
+                `Entrypoint bytecode was built for a different Node.js version than ${process.version}: V8 rejected the cached data. Cannot execute the code!`,
+            );
+
         const wrapper = script.runInThisContext();
 
         if (!wrapper)
@@ -431,6 +449,11 @@ class Unpacker {
         outputFolder: string = ".",
         shouldRun: boolean = false,
     ) {
+        if (shouldRun && isBun())
+            throw new Error(
+                "--run is not supported under Bun: the entrypoint is V8 bytecode and Bun runs JavaScriptCore.",
+            );
+
         console.log(
             `Detected compression: ${CompressionType[this.props.doCompress]}`,
         );
@@ -446,6 +469,21 @@ class Unpacker {
         const fd = await fs.open(this.filePath, "r");
 
         try {
+            const jobs: Array<{
+                vfsPath: string;
+                outPath: string;
+                range: [number, number];
+                statRange?: [number, number];
+            }> = [];
+            const dirJobs: Array<{
+                outPath: string;
+                statRange?: [number, number];
+            }> = [];
+            const symlinkJobs: Array<{
+                outLink: string;
+                outTarget: string;
+            }> = [];
+
             for (let path_ in this.props.vfs) {
                 if (this.props.doCompress)
                     path_ = this.toOriginal(
@@ -463,13 +501,43 @@ class Unpacker {
                         this.reverseLinks(this.normalizePath(path_)),
                     );
 
-                if (
-                    !vfsEntry ||
-                    (!(StoreType.BLOB.toString() in vfsEntry) &&
-                        !(StoreType.CONTENT.toString() in vfsEntry))
-                )
-                    // Ignore directories and file info
+                if (!vfsEntry) continue;
+
+                const symlinkTarget = this.symlinkLinks.get(path_);
+
+                if (symlinkTarget !== undefined) {
+                    symlinkJobs.push({
+                        outLink: path.join(
+                            outputPath,
+                            path_.replace(C_DISK, ""),
+                        ),
+                        outTarget: this.remapSymlinkTarget(
+                            symlinkTarget,
+                            outputPath,
+                        ),
+                    });
+
                     continue;
+                }
+
+                const outPath = path.join(
+                    outputPath,
+                    path_.replace(C_DISK, ""),
+                );
+                const statRange = vfsEntry[StoreType.STAT.toString()];
+
+                if (
+                    !(StoreType.BLOB.toString() in vfsEntry) &&
+                    !(StoreType.CONTENT.toString() in vfsEntry)
+                ) {
+                    if (
+                        StoreType.LINKS.toString() in vfsEntry ||
+                        StoreType.STAT.toString() in vfsEntry
+                    )
+                        dirJobs.push({ outPath, statRange });
+
+                    continue;
+                }
 
                 const range =
                     vfsEntry[StoreType.CONTENT.toString()] ||
@@ -477,35 +545,86 @@ class Unpacker {
 
                 if (!range) continue;
 
-                let blob = await this.readFile(
-                    fd,
-                    // Prefer text content over blob
-                    range,
+                jobs.push({ vfsPath: path_, outPath, range, statRange });
+            }
+
+            const CHUNK_SIZE = 8;
+
+            for (let i = 0; i < jobs.length; i += CHUNK_SIZE) {
+                await Promise.all(
+                    jobs.slice(i, i + CHUNK_SIZE).map(async (job) => {
+                        const blob = await this.readFile(fd, job.range);
+
+                        if (!blob) {
+                            console.warn(
+                                `Could not read file with VFS path of ${job.vfsPath}!`,
+                            );
+                            return;
+                        }
+
+                        if (
+                            shouldRun &&
+                            job.vfsPath === this.props.entryPoint
+                        ) {
+                            try {
+                                this.executeEntrypoint(blob);
+                                entrypointExecuted = true;
+                            } catch (e) {
+                                console.error(
+                                    `Entrypoint execution failed! ${
+                                        e instanceof Error ? e.toString() : e
+                                    }`,
+                                );
+                            }
+                        }
+
+                        await this.writeFile(job.outPath, blob);
+
+                        if (job.statRange) {
+                            const statBlob = await this.readFile(
+                                fd,
+                                job.statRange,
+                            );
+                            const mode = statBlob && parseStatMode(statBlob);
+
+                            if (typeof mode === "number") {
+                                try {
+                                    await fs.chmod(job.outPath, mode);
+                                } catch {
+                                    console.warn(
+                                        `Could not chmod ${job.outPath}!`,
+                                    );
+                                }
+                            }
+                        }
+                    }),
                 );
+            }
 
-                if (!blob) {
-                    console.warn(
-                        `Could not read file with VFS path of ${path_}!`,
-                    );
-                    continue;
-                }
+            for (const dir of dirJobs) {
+                await this.ensureDir(dir.outPath);
 
-                if (shouldRun && path_ === this.props.entryPoint) {
-                    try {
-                        this.executeEntrypoint(blob);
-                        entrypointExecuted = true;
-                    } catch (e) {
-                        console.error(
-                            `Entrypoint execution failed! ${
-                                e instanceof Error ? e.toString() : e
-                            }`,
-                        );
+                if (dir.statRange) {
+                    const statBlob = await this.readFile(fd, dir.statRange);
+                    const mode = statBlob && parseStatMode(statBlob);
+
+                    if (typeof mode === "number") {
+                        try {
+                            await fs.chmod(dir.outPath, mode);
+                        } catch {
+                            console.warn(`Could not chmod ${dir.outPath}!`);
+                        }
                     }
                 }
+            }
 
-                path_ = path.join(outputPath, path_.replace(C_DISK, ""));
-
-                await this.writeFile(path_, blob);
+            for (const link of symlinkJobs) {
+                try {
+                    await this.ensureDir(path.dirname(link.outLink));
+                    await fs.symlink(link.outTarget, link.outLink);
+                } catch {
+                    console.warn(`Could not create symlink ${link.outLink}!`);
+                }
             }
         } finally {
             await fd.close();
@@ -515,7 +634,7 @@ class Unpacker {
 
         if (shouldRun && !entrypointExecuted)
             console.warn(
-                "The binary has not been executed! It may be because the entrypoint could not be found.",
+                "The binary has not been executed! See the error above.",
             );
     }
 }

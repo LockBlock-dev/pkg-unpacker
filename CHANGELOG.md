@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-10-13
+
+### Added
+
+-   Recreate directories and symlinks and apply stat modes on extraction
+
+### Changed
+
+-   Unpack files in parallel chunks and cache created directories
+-   `--run` is refused under Bun and requires a matching Node.js/V8 version otherwise, with an explicit error
+
 ## [2.5.0] - 2026-10-13
 
 ### Added

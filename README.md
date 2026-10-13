@@ -84,6 +84,10 @@ As a library on Node.js:
 import Unpacker from "pkg-unpacker/unpacker";
 ```
 
+`--run` executes the entrypoint: refused under Bun (V8 bytecode can't run on
+JavaScriptCore), and on Node.js it requires the host version to match the
+binary's target, otherwise it fails with an explicit version error.
+
 Here’s an overview of the `help` command output:
 
 ```console

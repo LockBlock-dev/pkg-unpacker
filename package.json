@@ -1,6 +1,6 @@
 {
     "name": "pkg-unpacker",
-    "version": "2.5.0",
+    "version": "2.6.0",
     "description": "Unpack any pkg application",
     "private": true,
     "type": "module",
@@ -30,7 +30,7 @@
         "commander": "^15.0.0"
     },
     "devDependencies": {
-        "@types/bun": "latest",
+        "@types/bun": "^1.4.3",
         "@types/node": "^26.6.5",
         "typescript": "^7.0.2"
     }

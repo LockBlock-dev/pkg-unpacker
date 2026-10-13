@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import fs from "node:fs/promises";
+import path from "node:path";
+import { tmpdir } from "node:os";
 
 import { CompressionType, type Props } from "./types.js";
 import Unpacker from "./unpacker.js";
-import { zstdDecompress } from "./utils.js";
+import { zstdDecompress, parseStatMode } from "./utils.js";
 
 describe("pkg 5.8.1 (latest) - linux", () => {
     const prelude: Props = {
@@ -201,6 +204,142 @@ describe("pkg 6.23.0 - linux - zstd", () => {
 
         expect(decompressed.toString("utf-8")).toBe(
             '{"mode":33188,"size":28,"isFileValue":true}',
+        );
+    });
+});
+
+describe("parseStatMode", () => {
+    test("extracts permission bits", () => {
+        expect(parseStatMode(Buffer.from('{"mode":33188}'))).toBe(0o644);
+        expect(parseStatMode(Buffer.from('{"mode":16877}'))).toBe(0o755);
+    });
+
+    test("rejects garbage", () => {
+        expect(parseStatMode(Buffer.from("not json"))).toBeUndefined();
+        expect(parseStatMode(Buffer.from('{"size":3}'))).toBeUndefined();
+    });
+});
+
+describe("symlinks", () => {
+    const prelude: Props = {
+        vfs: { "/snapshot/a": { "0": [0, 1] } },
+        entryPoint: "/snapshot/a",
+        symlinks: { "/snapshot/link": "/snapshot/a" },
+        filesDict: {},
+        doCompress: CompressionType.NONE,
+    };
+
+    test("precomputes link map", () => {
+        const unpacker = new Unpacker("N/A", prelude, -1);
+
+        expect(unpacker["symlinkLinks"].get("/snapshot/link")).toBe(
+            "/snapshot/a",
+        );
+    });
+
+    test("remaps snapshot targets into output", () => {
+        const unpacker = new Unpacker("N/A", prelude, -1);
+
+        expect(unpacker["remapSymlinkTarget"]("/snapshot/a", "/out")).toBe(
+            path.join("/out", "/snapshot/a"),
+        );
+        expect(unpacker["remapSymlinkTarget"]("../rel", "/out")).toBe(
+            "../rel",
+        );
+        expect(unpacker["remapSymlinkTarget"]("/etc/hostname", "/out")).toBe(
+            "/etc/hostname",
+        );
+    });
+});
+
+describe("unpack fidelity", () => {
+    const buildBinary = () => {
+        const appContent = "console.log(1);";
+        const statFile = '{"mode":33188}';
+        const children = '["app.js"]';
+        const statDir = '{"mode":16877}';
+        const statLink = '{"mode":33188}';
+
+        const appOff = 0;
+        const statFileOff = appOff + appContent.length;
+        const childrenOff = statFileOff + statFile.length;
+        const statDirOff = childrenOff + children.length;
+        const statLinkOff = statDirOff + statDir.length;
+
+        const vfs = {
+            "/snapshot/app.js": {
+                "0": [appOff, appContent.length],
+                "3": [statFileOff, statFile.length],
+            },
+            "/snapshot/sub": {
+                "2": [childrenOff, children.length],
+                "3": [statDirOff, statDir.length],
+            },
+            "/snapshot/link": { "3": [statLinkOff, statLink.length] },
+        };
+
+        const trailer = [
+            JSON.stringify(vfs),
+            JSON.stringify("/snapshot/app.js"),
+            JSON.stringify({ "/snapshot/link": "/snapshot/app.js" }),
+            "{}",
+            "0",
+        ].join("\n,\n");
+
+        const header = "JUNKJUNK\n";
+        const position = header.length + 24 + 12 + 7;
+        const markerLine =
+            `var PAYLOAD_POSITION = '${String(position).padStart(12, " ")}' | 0;\n`;
+        const payload =
+            appContent + statFile + children + statDir + statLink;
+
+        return Buffer.concat([
+            Buffer.from(header + markerLine),
+            Buffer.from(payload),
+            Buffer.from("\n"),
+            Buffer.from(trailer),
+        ]);
+    };
+
+    test("extracts files, dirs, modes and symlinks", async () => {
+        const dir = await fs.mkdtemp(path.join(tmpdir(), "pkg-unpacker-"));
+        const bin = path.join(dir, "fake.bin");
+        const out = path.join(dir, "out");
+
+        await fs.writeFile(bin, buildBinary());
+
+        const unpacker = await Unpacker.create(bin);
+        await unpacker.unpack(out);
+
+        const appPath = path.join(out, "snapshot", "app.js");
+        expect(await fs.readFile(appPath, "utf-8")).toBe("console.log(1);");
+        expect((await fs.stat(appPath)).mode & 0o777).toBe(0o644);
+
+        const subPath = path.join(out, "snapshot", "sub");
+        expect((await fs.stat(subPath)).isDirectory()).toBe(true);
+        expect((await fs.stat(subPath)).mode & 0o777).toBe(0o755);
+
+        const linkPath = path.join(out, "snapshot", "link");
+        expect((await fs.lstat(linkPath)).isSymbolicLink()).toBe(true);
+        expect(await fs.readlink(linkPath)).toBe(appPath);
+        expect(await fs.readFile(linkPath, "utf-8")).toBe("console.log(1);");
+
+        await fs.rm(dir, { recursive: true });
+    });
+});
+
+describe("--run", () => {
+    test("unpack refuses --run under Bun", async () => {
+        const unpacker = new Unpacker("N/A", {
+            vfs: {},
+            entryPoint: "",
+            symlinks: {},
+            filesDict: {},
+            doCompress: CompressionType.NONE,
+        }, -1);
+
+        await expect(unpacker.unpack("/nonexistent-dir", true)).rejects.toThrow(
+            /not supported under Bun/,
         );
     });
 });

@@ -22,9 +22,7 @@ function readVersion(): string {
                 typeof parsed.version === "string"
             )
                 return parsed.version;
-        } catch {
-            // Try the next candidate.
-        }
+        } catch {}
     }
 
     return "unknown";
