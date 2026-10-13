@@ -1,3 +1,4 @@
+#!/usr/bin/env bun
 import process from "node:process";
 
 import UnpackerCli from "./cli.js";

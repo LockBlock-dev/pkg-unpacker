@@ -53,6 +53,41 @@ As of this writing, **pkg-unpacker** supports the following tools:
     bun run compile
     ```
 
+Without cloning, add it from GitHub, then use the linked binary.
+
+With Bun:
+
+```sh
+bun add github:LockBlock-dev/pkg-unpacker
+./node_modules/.bin/pkg-unpacker -i ./pkg_app -o ./unpacked
+```
+
+Or in one shot:
+
+```sh
+bunx github:LockBlock-dev/pkg-unpacker -i ./pkg_app -o ./unpacked
+```
+
+With pnpm:
+
+```sh
+pnpm add github:LockBlock-dev/pkg-unpacker
+./node_modules/.bin/pkg-unpacker -i ./pkg_app -o ./unpacked
+```
+
+Or in one shot:
+
+```sh
+pnpm dlx github:LockBlock-dev/pkg-unpacker -i ./pkg_app -o ./unpacked
+```
+
+With npm (git fetches need allowing):
+
+```sh
+NPM_CONFIG_ALLOW_GIT=all npm install github:LockBlock-dev/pkg-unpacker
+./node_modules/.bin/pkg-unpacker -i ./pkg_app -o ./unpacked
+```
+
 ## Usage
 
 ### As a command line interface
