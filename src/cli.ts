@@ -4,6 +4,7 @@ import path from "node:path";
 import process from "node:process";
 
 import Unpacker from "./unpacker.js";
+import { VERSION } from "./version.js";
 
 class Cli {
     private program: Command;
@@ -15,6 +16,7 @@ class Cli {
     private setup() {
         this.program
             .name("pkg-unpacker")
+            .version(VERSION)
             .requiredOption(
                 "-i, --input <file>",
                 "Specify the input binary file path",

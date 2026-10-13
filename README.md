@@ -86,6 +86,7 @@ Here’s an overview of the `help` command output:
 Usage: pkg-unpacker [options]
 
 Options:
+  -V, --version          output the version number
   -i, --input <file>     Specify the input binary file path
   -o, --output <folder>  Specify the output folder path (default: ".")
   --run                  Run the unpacked binary (default: false)

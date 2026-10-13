@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-10-13
+
+### Fixed
+
+-   Close the file handle in `unpack` (`try/finally`) instead of leaking it
+-   Await the CLI run in `main.ts` and exit non-zero on failure instead of an unhandled rejection
+-   Keep unknown path segments as-is in `toOriginal` instead of joining `undefined`
+-   Debug-log decompression fallback in `readFile` instead of swallowing the error
+
+### Changed
+
+-   `Unpacker.create` scans the binary tail (doubling 4 MiB window) for props and the payload marker instead of reading the whole file twice
+-   Remove dead `Buffer`/`URL` branches (`isUrl`/`pathToString`), fix `nativeSeparator` typo
+-   Add `-V, --version` flag wired to the package version
+
 ## [2.3.0] - 2026-10-13
 
 ### Added

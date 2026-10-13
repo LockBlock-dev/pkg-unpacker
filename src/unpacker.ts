@@ -9,6 +9,8 @@ import {
     SEPARATOR,
     RAW_PROPS_REGEX,
     OLD_SEPARATOR,
+    PAYLOAD_MARKER,
+    PROPS_SCAN_WINDOW,
 } from "./constants.js";
 import { UnpackerReadError } from "./errors.js";
 import { CompressionType, StoreType, type Props } from "./types.js";
@@ -35,38 +37,76 @@ class Unpacker {
     private payloadPosition: number;
     private symlinksEntries: Array<[string, string]>;
     private separator: string;
-    private nativeSeprator: typeof path.sep;
+    private nativeSeparator: typeof path.sep;
     private dictRev: Record<string, string>;
     private maxKey: number;
     private props: Props;
 
     static async create(filePath: string) {
-        const binary = await fs.readFile(filePath, { encoding: "utf-8" });
-        const rawProps = binary.match(RAW_PROPS_REGEX);
+        // Props and payload marker live at the binary tail: scan it first.
+        const handle = await fs.open(filePath, "r");
 
-        if (!rawProps?.length || !rawProps[0])
-            throw new UnpackerReadError(
-                "Error while reading the binary props!",
+        try {
+            const { size } = await handle.stat();
+
+            let windowSize = Math.min(size, PROPS_SCAN_WINDOW);
+            let tail = Buffer.alloc(0);
+            let rawProps: RegExpMatchArray | null = null;
+
+            while (true) {
+                tail = Buffer.alloc(windowSize);
+                await handle.read({
+                    buffer: tail,
+                    offset: 0,
+                    length: windowSize,
+                    position: size - windowSize,
+                });
+
+                rawProps = tail.toString("utf-8").match(RAW_PROPS_REGEX);
+
+                if (rawProps?.length || windowSize >= size) break;
+
+                windowSize = Math.min(size, windowSize * 2);
+            }
+
+            if (!rawProps?.length || !rawProps[0])
+                throw new UnpackerReadError(
+                    "Error while reading the binary props!",
+                );
+
+            const props = Unpacker.initProps(rawProps[0].split("\n,\n"));
+
+            let markerIdx = tail.indexOf(PAYLOAD_MARKER);
+            let file: Buffer;
+
+            if (markerIdx === -1) {
+                // Marker sits before the scanned tail: fall back to a full read.
+                file = await handle.readFile();
+                markerIdx = file.indexOf(PAYLOAD_MARKER);
+            } else {
+                file = tail;
+            }
+
+            if (markerIdx === -1)
+                throw new UnpackerReadError("Cannot find the pkg payload!");
+
+            const lineEnd = file.indexOf("\n", markerIdx);
+            const payload = file.subarray(
+                markerIdx,
+                lineEnd === -1 ? undefined : lineEnd,
             );
 
-        const props = Unpacker.initProps(rawProps[0].split("\n,\n"));
-        const file = await fs.readFile(filePath);
-        const idx = file.indexOf(Buffer.from("var PAYLOAD_POSITION = "));
+            const payloadPosition = Number(
+                payload.toString().match(/\d+/)?.[0] ?? -1,
+            );
 
-        if (idx === -1)
-            throw new UnpackerReadError("Cannot find the pkg payload!");
+            if (payloadPosition === -1)
+                throw new UnpackerReadError("Cannot find the pkg payload!");
 
-        let payload = file.subarray(idx);
-        payload = payload.subarray(0, payload.indexOf(Buffer.from("\n")));
-
-        const payloadPosition = Number(
-            payload.toString().match(/\d+/)?.[0] ?? -1,
-        );
-
-        if (payloadPosition === -1)
-            throw new UnpackerReadError("Cannot find the pkg payload!");
-
-        return new Unpacker(filePath, props, payloadPosition);
+            return new Unpacker(filePath, props, payloadPosition);
+        } finally {
+            await handle.close();
+        }
     }
 
     private static initProps(rawProps: string[]) {
@@ -119,7 +159,7 @@ class Unpacker {
         if (firstEntry?.includes(OLD_SEPARATOR)) this.separator = OLD_SEPARATOR;
         else this.separator = props.doCompress ? SEPARATOR : path.sep;
 
-        this.nativeSeprator = this.props.entryPoint.includes(C_DISK)
+        this.nativeSeparator = this.props.entryPoint.includes(C_DISK)
             ? "\\"
             : "/";
 
@@ -156,22 +196,8 @@ class Unpacker {
         return f;
     }
 
-    private isUrl(p: unknown): p is URL {
-        return typeof URL !== "undefined" && p instanceof URL;
-    }
-
-    private pathToString(p: string) {
-        let result = p;
-
-        if (Buffer.isBuffer(p)) result = p.toString();
-        else if (this.isUrl(p))
-            result = IS_WIN32 ? p.pathname.replace(/^\//, "") : p.pathname;
-
-        return result;
-    }
-
     private normalizePath(f: string) {
-        let file = this.pathToString(f);
+        let file = f;
 
         if (!/^.:$/.test(file)) file = path.normalize(file); // 'c:' -> 'c:.'
 
@@ -212,12 +238,13 @@ class Unpacker {
 
         return fShort
             .split(this.separator)
-            .map((x) => this.dictRev[x])
-            .join(this.nativeSeprator);
+            // Keep unknown segments as-is instead of joining "undefined".
+            .map((x) => this.dictRev[x] ?? x)
+            .join(this.nativeSeparator);
     }
 
     private findVirtualFileSystemKeyAndFollowLinks(path_: string) {
-        let vfsKey = this.findVirtualFileSystemKey(path_, this.nativeSeprator);
+        let vfsKey = this.findVirtualFileSystemKey(path_, this.nativeSeparator);
         let needToSubstitute = true;
 
         while (needToSubstitute) {
@@ -282,7 +309,14 @@ class Unpacker {
                 return await gunzip(buf);
             else if (this.props.doCompress === CompressionType.BROTLI)
                 return await brotliDecompress(buf);
-        } catch {}
+        } catch (e) {
+            // Entry stored raw: fall back to the uncompressed bytes.
+            console.debug(
+                `Decompression failed, using raw bytes: ${
+                    e instanceof Error ? e.message : e
+                }`,
+            );
+        }
 
         return buf;
     }
@@ -339,64 +373,70 @@ class Unpacker {
         const outputPath = path.resolve(outputFolder);
         const fd = await fs.open(this.filePath, "r");
 
-        for (let path_ in this.props.vfs) {
-            if (this.props.doCompress)
-                path_ = this.toOriginal(
-                    this.reverseLinks(
-                        this.separator === OLD_SEPARATOR
-                            ? this.normalizePath(path_)
-                            : path_,
-                    ),
-                );
-
-            const vfsEntry = this.findVirtualFileSystemEntry(path_);
-
-            if (!this.props.doCompress && this.separator === OLD_SEPARATOR)
-                path_ = this.toOriginal(
-                    this.reverseLinks(this.normalizePath(path_)),
-                );
-
-            if (
-                !vfsEntry ||
-                (!(StoreType.BLOB.toString() in vfsEntry) &&
-                    !(StoreType.CONTENT.toString() in vfsEntry))
-            )
-                // Ignore directories and file info
-                continue;
-
-            const range =
-                vfsEntry[StoreType.CONTENT.toString()] ||
-                vfsEntry[StoreType.BLOB.toString()];
-
-            if (!range) continue;
-
-            let blob = await this.readFile(
-                fd,
-                // Prefer text content over blob
-                range,
-            );
-
-            if (!blob) {
-                console.warn(`Could not read file with VFS path of ${path_}!`);
-                continue;
-            }
-
-            if (shouldRun && path_ === this.props.entryPoint) {
-                try {
-                    this.executeEntrypoint(blob);
-                    entrypointExecuted = true;
-                } catch (e) {
-                    console.error(
-                        `Entrypoint execution failed! ${
-                            e instanceof Error ? e.toString() : e
-                        }`,
+        try {
+            for (let path_ in this.props.vfs) {
+                if (this.props.doCompress)
+                    path_ = this.toOriginal(
+                        this.reverseLinks(
+                            this.separator === OLD_SEPARATOR
+                                ? this.normalizePath(path_)
+                                : path_,
+                        ),
                     );
+
+                const vfsEntry = this.findVirtualFileSystemEntry(path_);
+
+                if (!this.props.doCompress && this.separator === OLD_SEPARATOR)
+                    path_ = this.toOriginal(
+                        this.reverseLinks(this.normalizePath(path_)),
+                    );
+
+                if (
+                    !vfsEntry ||
+                    (!(StoreType.BLOB.toString() in vfsEntry) &&
+                        !(StoreType.CONTENT.toString() in vfsEntry))
+                )
+                    // Ignore directories and file info
+                    continue;
+
+                const range =
+                    vfsEntry[StoreType.CONTENT.toString()] ||
+                    vfsEntry[StoreType.BLOB.toString()];
+
+                if (!range) continue;
+
+                let blob = await this.readFile(
+                    fd,
+                    // Prefer text content over blob
+                    range,
+                );
+
+                if (!blob) {
+                    console.warn(
+                        `Could not read file with VFS path of ${path_}!`,
+                    );
+                    continue;
                 }
+
+                if (shouldRun && path_ === this.props.entryPoint) {
+                    try {
+                        this.executeEntrypoint(blob);
+                        entrypointExecuted = true;
+                    } catch (e) {
+                        console.error(
+                            `Entrypoint execution failed! ${
+                                e instanceof Error ? e.toString() : e
+                            }`,
+                        );
+                    }
+                }
+
+                path_ = path.join(outputPath, path_.replace(C_DISK, ""));
+
+                await this.writeFile(path_, blob);
             }
-
-            path_ = path.join(outputPath, path_.replace(C_DISK, ""));
-
-            await this.writeFile(path_, blob);
+        } finally {
+            await fd.close();
         }
 
         console.log(`Binary unpacked to ${outputFolder}!`);

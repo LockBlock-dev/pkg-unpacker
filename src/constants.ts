@@ -9,3 +9,9 @@ export const SEPARATOR = "/";
 export const RAW_PROPS_REGEX = new RegExp(
     /\{.*}\n,\n".*"\n,\n\{.*}(?:\n,\n\{.*}\n,\n([012]))?/g,
 );
+
+// Marker of the payload offset line in pkg binaries.
+export const PAYLOAD_MARKER = "var PAYLOAD_POSITION = ";
+
+// Initial tail window for the props scan; doubled until matched.
+export const PROPS_SCAN_WINDOW = 4 * 1024 * 1024;
