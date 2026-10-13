@@ -6,29 +6,29 @@ Keep in mind that **this tool doesn't give you the full source code if the appli
 
 ## Table of Contents
 
--   [Support](#support)
--   [Installation](#installation)
--   [Usage](#usage)
-    -   [As a command line interface](#as-a-command-line-interface)
-    -   [As a library](#as-a-library)
--   [Features](#features)
--   [How it works](#how-it-works)
--   [Credits](#credits)
--   [Copyright](#copyright)
+- [Support](#support)
+- [Installation](#installation)
+- [Usage](#usage)
+    - [As a command line interface](#as-a-command-line-interface)
+    - [As a library](#as-a-library)
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Credits](#credits)
+- [Copyright](#copyright)
 
 ## Support
 
 As of this writing, **pkg-unpacker** supports the following tools:
 
-| Tool                                            | Supported | Versions      | Comment                                                                                                            |
-| ----------------------------------------------- | --------- | ------------- | ------------------------------------------------------------------------------------------------------------------ |
-| [vercel/pkg](https://github.com/vercel/pkg)     | ✅        | 5.0.0 - 5.8.1 | N/A                                                                                                                |
-| [yao-pkg/pkg](https://github.com/yao-pkg/pkg)   | ✅        | 5.0.0 - 6.23.0 | Does not include experimental support for [Node SEA](https://nodejs.org/api/single-executable-applications.html) . |
-| [AngaBlue/exe](https://github.com/AngaBlue/exe) | ❌        | -             | N/A                                                                                                                |
-| [nexe/nexe](https://github.com/nexe/nexe)         | ❌        | -             | Different bundle format, not pkg snapshots.                                                                        |
-| [leafac/caxa](https://github.com/leafac/caxa)     | ❌        | -             | Different layout, unmaintained since 2023.                                                                         |
-| [bun compile](https://bun.sh/docs/bundler/executables) | ❌   | -             | Own bundle format, not pkg snapshots.                                                                              |
-| [Node.js SEA](https://nodejs.org/api/single-executable-applications.html) | ❌ | - | Official blob format, not pkg snapshots.                                     |
+| Tool                                                                      | Supported | Versions       | Comment                                                                                                            |
+| ------------------------------------------------------------------------- | --------- | -------------- | ------------------------------------------------------------------------------------------------------------------ |
+| [vercel/pkg](https://github.com/vercel/pkg)                               | ✅        | 5.0.0 - 5.8.1  | N/A                                                                                                                |
+| [yao-pkg/pkg](https://github.com/yao-pkg/pkg)                             | ✅        | 5.0.0 - 6.23.0 | Does not include experimental support for [Node SEA](https://nodejs.org/api/single-executable-applications.html) . |
+| [AngaBlue/exe](https://github.com/AngaBlue/exe)                           | ❌        | -              | N/A                                                                                                                |
+| [nexe/nexe](https://github.com/nexe/nexe)                                 | ❌        | -              | Different bundle format, not pkg snapshots.                                                                        |
+| [leafac/caxa](https://github.com/leafac/caxa)                             | ❌        | -              | Different layout, unmaintained since 2023.                                                                         |
+| [bun compile](https://bun.sh/docs/bundler/executables)                    | ❌        | -              | Own bundle format, not pkg snapshots.                                                                              |
+| [Node.js SEA](https://nodejs.org/api/single-executable-applications.html) | ❌        | -              | Official blob format, not pkg snapshots.                                                                           |
 
 ## Installation
 
@@ -98,24 +98,25 @@ Options:
   -i, --input <file>     Specify the input binary file path
   -o, --output <folder>  Specify the output folder path (default: ".")
   --run                  Run the unpacked binary (default: false)
+  --json                 Output the unpack result as JSON (default: false)
   -h, --help             display help for command
 ```
 
 #### Examples:
 
--   Unpack a UNIX application:
+- Unpack a UNIX application:
 
 ```console
 $ bun run start -- -i ./pkg_app -o ./unpacked
 ```
 
--   Unpack a Windows application:
+- Unpack a Windows application:
 
 ```console
 $ bun run start -- -i ./pkg_app.exe -o ./unpacked
 ```
 
--   Unpack a UNIX application and run it:
+- Unpack a UNIX application and run it:
 
 ```console
 $ bun run start -- -i ./pkg_app -o ./unpacked --run
@@ -127,7 +128,7 @@ The main logic of **pkg unpacker** lies in the [`Unpacker`](./src/unpacker.ts) c
 
 #### Examples:
 
--   Unpack a UNIX application:
+- Unpack a UNIX application:
 
 ```ts
 import Unpacker from "./src/unpacker.ts";
@@ -140,7 +141,7 @@ const main = async () => {
 main();
 ```
 
--   Unpack a Windows application and run it:
+- Unpack a Windows application and run it:
 
 ```ts
 import Unpacker from "./src/unpacker.ts";
@@ -153,12 +154,21 @@ const main = async () => {
 main();
 ```
 
+### With REA
+
+Feed the output directory to [REA](https://github.com/morluto/rea) for analysis:
+
+```sh
+bun run start -- -i ./pkg_app -o ./unpacked --json > result.json
+npx -y rea-agents@latest analyze-javascript-application /absolute/path/to/unpacked --json
+```
+
 ## Features
 
--   Detects compression formats (Gzip, Brotli, Zstd)
--   Supports code evaluation
--   Handles symlinks
--   Extracts binaries from all operating systems
+- Detects compression formats (Gzip, Brotli, Zstd)
+- Supports code evaluation
+- Handles symlinks
+- Extracts binaries from all operating systems
 
 ## How it works
 
@@ -181,7 +191,7 @@ Examples:
 ,
 {} // files dictionnary
 ,
-0 // 0: no compression, 1: Gzip, 2: Brotli
+0 // 0: no compression, 1: Gzip, 2: Brotli, 3: Zstd
 ```
 
 ```js
@@ -195,7 +205,7 @@ Examples:
 ,
 {} // files dictionnary
 ,
-0 // 0: no compression, 1: Gzip, 2: Brotli
+0 // 0: no compression, 1: Gzip, 2: Brotli, 3: Zstd
 ```
 
 ## Credits

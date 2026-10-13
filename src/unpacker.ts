@@ -12,7 +12,14 @@ import {
     PROPS_SCAN_WINDOW,
 } from "./constants.js";
 import { UnpackerReadError } from "./errors.js";
-import { CompressionType, StoreType, type Props } from "./types.js";
+import {
+    CompressionType,
+    StoreType,
+    type FileKind,
+    type Props,
+    type UnpackOptions,
+    type UnpackResult,
+} from "./types.js";
 import { gunzip, brotliDecompress, zstdDecompress, isBun, parseStatMode } from "./utils.js";
 
 const EMPTY_PROPS: Props = {
@@ -337,9 +344,26 @@ class Unpacker {
             target.startsWith("/snapshot/") ||
             /^[A-Za-z]:\\snapshot\\/i.test(target)
         )
-            return path.join(outputPath, target.replace(C_DISK, ""));
+            return this.toOutPath(target, outputPath);
 
         return target;
+    }
+
+    private toOutPath(vfsPath: string, outputPath: string) {
+        const parts = vfsPath
+            .replace(C_DISK, "")
+            .split(this.nativeSeparator === "\\" ? "\\" : "/")
+            .filter((part) => part !== "");
+
+        if (parts[0] === "snapshot") parts.shift();
+
+        return path.join(outputPath, parts.join(path.sep));
+    }
+
+    private static classifyKind(fromContent: boolean, ext: string): FileKind {
+        if (ext === ".json") return "source";
+        if (ext !== ".js" && ext !== ".mjs" && ext !== ".cjs") return "asset";
+        return fromContent ? "source" : "bytecode";
     }
 
     private findVirtualFileSystemEntry(path_: string) {
@@ -366,8 +390,11 @@ class Unpacker {
         return path_;
     }
 
-    private async readFile(fd: FileHandle, [startPos, size]: [number, number]) {
-        let buf = Buffer.alloc(size);
+    private async readFile(
+        fd: FileHandle,
+        [startPos, size]: [number, number],
+    ) {
+        const buf = Buffer.alloc(size);
 
         const { bytesRead } = await fd.read({
             buffer: buf,
@@ -382,20 +409,16 @@ class Unpacker {
 
         try {
             if (this.props.doCompress === CompressionType.GZIP)
-                return await gunzip(buf);
+                return { blob: await gunzip(buf), raw: false };
             else if (this.props.doCompress === CompressionType.BROTLI)
-                return await brotliDecompress(buf);
+                return { blob: await brotliDecompress(buf), raw: false };
             else if (this.props.doCompress === CompressionType.ZSTD)
-                return await zstdDecompress(buf);
-        } catch (e) {
-            console.debug(
-                `Decompression failed, using raw bytes: ${
-                    e instanceof Error ? e.message : e
-                }`,
-            );
+                return { blob: await zstdDecompress(buf), raw: false };
+        } catch {
+            return { blob: buf, raw: true };
         }
 
-        return buf;
+        return { blob: buf, raw: false };
     }
 
     private createdDirs = new Set<string>();
@@ -448,25 +471,39 @@ class Unpacker {
     public async unpack(
         outputFolder: string = ".",
         shouldRun: boolean = false,
-    ) {
+        options: UnpackOptions = {},
+    ): Promise<UnpackResult> {
         if (shouldRun && isBun())
             throw new Error(
                 "--run is not supported under Bun: the entrypoint is V8 bytecode and Bun runs JavaScriptCore.",
             );
 
-        console.log(
-            `Detected compression: ${CompressionType[this.props.doCompress]}`,
-        );
-        console.log(`Detected entrypoint: ${this.props.entryPoint}`);
-        console.log(
-            `Unpacking your binary, ${
-                Object.keys(this.props.vfs).length
-            } elements to go...`,
-        );
+        const json = options.json ?? false;
+
+        if (!json) {
+            console.log(
+                `Detected compression: ${CompressionType[this.props.doCompress]}`,
+            );
+            console.log(`Detected entrypoint: ${this.props.entryPoint}`);
+            console.log(
+                `Unpacking your binary, ${
+                    Object.keys(this.props.vfs).length
+                } elements to go...`,
+            );
+        }
 
         let entrypointExecuted = false;
         const outputPath = path.resolve(outputFolder);
         const fd = await fs.open(this.filePath, "r");
+
+        const files: UnpackResult["files"] = [];
+        const skipped: UnpackResult["skipped"] = [];
+        const links: UnpackResult["symlinks"] = [];
+        const warnings: string[] = [];
+        const warn = (message: string) => {
+            warnings.push(message);
+            console.warn(message);
+        };
 
         try {
             const jobs: Array<{
@@ -474,6 +511,7 @@ class Unpacker {
                 outPath: string;
                 range: [number, number];
                 statRange?: [number, number];
+                content: boolean;
             }> = [];
             const dirJobs: Array<{
                 outPath: string;
@@ -483,6 +521,10 @@ class Unpacker {
                 outLink: string;
                 outTarget: string;
             }> = [];
+
+            const outside = (out: string) =>
+                out !== outputPath &&
+                !out.startsWith(outputPath + path.sep);
 
             for (let path_ in this.props.vfs) {
                 if (this.props.doCompress)
@@ -501,16 +543,26 @@ class Unpacker {
                         this.reverseLinks(this.normalizePath(path_)),
                     );
 
-                if (!vfsEntry) continue;
+                if (!vfsEntry) {
+                    skipped.push({ path: path_, reason: "no vfs entry" });
+                    continue;
+                }
 
                 const symlinkTarget = this.symlinkLinks.get(path_);
 
                 if (symlinkTarget !== undefined) {
+                    const outLink = this.toOutPath(path_, outputPath);
+
+                    if (outside(outLink)) {
+                        skipped.push({
+                            path: outLink,
+                            reason: "outside output directory",
+                        });
+                        continue;
+                    }
+
                     symlinkJobs.push({
-                        outLink: path.join(
-                            outputPath,
-                            path_.replace(C_DISK, ""),
-                        ),
+                        outLink,
                         outTarget: this.remapSymlinkTarget(
                             symlinkTarget,
                             outputPath,
@@ -520,10 +572,16 @@ class Unpacker {
                     continue;
                 }
 
-                const outPath = path.join(
-                    outputPath,
-                    path_.replace(C_DISK, ""),
-                );
+                const outPath = this.toOutPath(path_, outputPath);
+
+                if (outside(outPath)) {
+                    skipped.push({
+                        path: outPath,
+                        reason: "outside output directory",
+                    });
+                    continue;
+                }
+
                 const statRange = vfsEntry[StoreType.STAT.toString()];
 
                 if (
@@ -535,17 +593,31 @@ class Unpacker {
                         StoreType.STAT.toString() in vfsEntry
                     )
                         dirJobs.push({ outPath, statRange });
+                    else
+                        skipped.push({
+                            path: outPath,
+                            reason: "no content stores",
+                        });
 
                     continue;
                 }
 
+                const contentRange = vfsEntry[StoreType.CONTENT.toString()];
                 const range =
-                    vfsEntry[StoreType.CONTENT.toString()] ||
-                    vfsEntry[StoreType.BLOB.toString()];
+                    contentRange || vfsEntry[StoreType.BLOB.toString()];
 
-                if (!range) continue;
+                if (!range) {
+                    skipped.push({ path: outPath, reason: "no payload range" });
+                    continue;
+                }
 
-                jobs.push({ vfsPath: path_, outPath, range, statRange });
+                jobs.push({
+                    vfsPath: path_,
+                    outPath,
+                    range,
+                    statRange,
+                    content: contentRange !== undefined,
+                });
             }
 
             const CHUNK_SIZE = 8;
@@ -553,14 +625,25 @@ class Unpacker {
             for (let i = 0; i < jobs.length; i += CHUNK_SIZE) {
                 await Promise.all(
                     jobs.slice(i, i + CHUNK_SIZE).map(async (job) => {
-                        const blob = await this.readFile(fd, job.range);
+                        const res = await this.readFile(fd, job.range);
 
-                        if (!blob) {
-                            console.warn(
+                        if (!res) {
+                            warn(
                                 `Could not read file with VFS path of ${job.vfsPath}!`,
                             );
+                            skipped.push({
+                                path: job.outPath,
+                                reason: "unreadable payload",
+                            });
                             return;
                         }
+
+                        if (res.raw)
+                            warn(
+                                `Decompression failed for ${job.vfsPath}, using raw bytes.`,
+                            );
+
+                        const { blob } = res;
 
                         if (
                             shouldRun &&
@@ -581,22 +664,30 @@ class Unpacker {
                         await this.writeFile(job.outPath, blob);
 
                         if (job.statRange) {
-                            const statBlob = await this.readFile(
+                            const statRes = await this.readFile(
                                 fd,
                                 job.statRange,
                             );
-                            const mode = statBlob && parseStatMode(statBlob);
+                            const mode =
+                                statRes && parseStatMode(statRes.blob);
 
                             if (typeof mode === "number") {
                                 try {
                                     await fs.chmod(job.outPath, mode);
                                 } catch {
-                                    console.warn(
-                                        `Could not chmod ${job.outPath}!`,
-                                    );
+                                    warn(`Could not chmod ${job.outPath}!`);
                                 }
                             }
                         }
+
+                        files.push({
+                            path: job.outPath,
+                            size: blob.length,
+                            kind: Unpacker.classifyKind(
+                                job.content,
+                                path.extname(job.outPath).toLowerCase(),
+                            ),
+                        });
                     }),
                 );
             }
@@ -605,14 +696,14 @@ class Unpacker {
                 await this.ensureDir(dir.outPath);
 
                 if (dir.statRange) {
-                    const statBlob = await this.readFile(fd, dir.statRange);
-                    const mode = statBlob && parseStatMode(statBlob);
+                    const statRes = await this.readFile(fd, dir.statRange);
+                    const mode = statRes && parseStatMode(statRes.blob);
 
                     if (typeof mode === "number") {
                         try {
                             await fs.chmod(dir.outPath, mode);
                         } catch {
-                            console.warn(`Could not chmod ${dir.outPath}!`);
+                            warn(`Could not chmod ${dir.outPath}!`);
                         }
                     }
                 }
@@ -622,20 +713,36 @@ class Unpacker {
                 try {
                     await this.ensureDir(path.dirname(link.outLink));
                     await fs.symlink(link.outTarget, link.outLink);
+                    links.push({
+                        path: link.outLink,
+                        target: link.outTarget,
+                    });
                 } catch {
-                    console.warn(`Could not create symlink ${link.outLink}!`);
+                    warn(`Could not create symlink ${link.outLink}!`);
+                    skipped.push({
+                        path: link.outLink,
+                        reason: "symlink failed",
+                    });
                 }
             }
         } finally {
             await fd.close();
         }
 
-        console.log(`Binary unpacked to ${outputFolder}!`);
+        if (!json) console.log(`Binary unpacked to ${outputFolder}!`);
 
         if (shouldRun && !entrypointExecuted)
-            console.warn(
-                "The binary has not been executed! See the error above.",
-            );
+            warn("The binary has not been executed! See the error above.");
+
+        return {
+            outputDir: outputPath,
+            entrypoint: this.props.entryPoint,
+            compression: CompressionType[this.props.doCompress] ?? "UNKNOWN",
+            files,
+            skipped,
+            symlinks: links,
+            warnings,
+        };
     }
 }
 

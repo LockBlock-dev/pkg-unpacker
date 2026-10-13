@@ -1,6 +1,6 @@
 {
     "name": "pkg-unpacker",
-    "version": "2.6.0",
+    "version": "2.7.0",
     "description": "Unpack any pkg application",
     "private": true,
     "type": "module",

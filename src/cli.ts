@@ -27,7 +27,8 @@ class Cli {
                 "Specify the output folder path",
                 ".",
             )
-            .option("--run", "Run the unpacked binary", false);
+            .option("--run", "Run the unpacked binary", false)
+            .option("--json", "Output the unpack result as JSON", false);
 
         this.program.parse();
 
@@ -57,15 +58,17 @@ class Cli {
             inputPath,
             outputPath,
             shouldRun: options.run as boolean,
+            json: options.json as boolean,
         };
     }
 
     public async run() {
-        const { inputPath, outputPath, shouldRun } = this.setup();
+        const { inputPath, outputPath, shouldRun, json } = this.setup();
 
         const unpacker = await Unpacker.create(inputPath);
+        const result = await unpacker.unpack(outputPath, shouldRun, { json });
 
-        await unpacker.unpack(outputPath, shouldRun);
+        if (json) console.log(JSON.stringify(result, null, 2));
     }
 }
 
