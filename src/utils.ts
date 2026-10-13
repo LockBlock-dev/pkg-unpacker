@@ -23,3 +23,15 @@ export const brotliDecompress = (
         });
     });
 };
+
+export const zstdDecompress = (
+    buf: zlib.InputType,
+    options: zlib.ZstdOptions = {},
+): Promise<Buffer> => {
+    return new Promise<Buffer>((resolve, reject) => {
+        zlib.zstdDecompress(buf, options, (err, res) => {
+            if (!err) resolve(res);
+            else reject(err);
+        });
+    });
+};

@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-10-13
+
+### Added
+
+-   Support Zstd compression (yao-pkg/pkg) end to end: enum value, decompression, placeholder discovery, tests
+
+### Fixed
+
+-   Reject `payloadPosition <= 0` with a loud error instead of silently extracting garbage
+-   Reject unknown compression types instead of writing nonsense files
+
+### Changed
+
+-   `Unpacker.create` falls back to placeholder discovery (padded-number scan validated against stat entries) when the payload marker is unpatched, restoring newer yao-pkg binaries
+-   Props regex captures any compression digit so unknown ones reach validation instead of being silently truncated
+
 ## [2.4.0] - 2026-10-13
 
 ### Fixed

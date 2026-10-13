@@ -23,8 +23,12 @@ As of this writing, **pkg-unpacker** supports the following tools:
 | Tool                                            | Supported | Versions      | Comment                                                                                                            |
 | ----------------------------------------------- | --------- | ------------- | ------------------------------------------------------------------------------------------------------------------ |
 | [vercel/pkg](https://github.com/vercel/pkg)     | ✅        | 5.0.0 - 5.8.1 | N/A                                                                                                                |
-| [yao-pkg/pkg](https://github.com/yao-pkg/pkg)   | ✅        | 5.0.0 - 6.3.2 | Does not include experimental support for [Node SEA](https://nodejs.org/api/single-executable-applications.html) . |
+| [yao-pkg/pkg](https://github.com/yao-pkg/pkg)   | ✅        | 5.0.0 - 6.23.0 | Does not include experimental support for [Node SEA](https://nodejs.org/api/single-executable-applications.html) . |
 | [AngaBlue/exe](https://github.com/AngaBlue/exe) | ❌        | -             | N/A                                                                                                                |
+| [nexe/nexe](https://github.com/nexe/nexe)         | ❌        | -             | Different bundle format, not pkg snapshots.                                                                        |
+| [leafac/caxa](https://github.com/leafac/caxa)     | ❌        | -             | Different layout, unmaintained since 2023.                                                                         |
+| [bun compile](https://bun.sh/docs/bundler/executables) | ❌   | -             | Own bundle format, not pkg snapshots.                                                                              |
+| [Node.js SEA](https://nodejs.org/api/single-executable-applications.html) | ❌ | - | Official blob format, not pkg snapshots.                                     |
 
 ## Installation
 
@@ -147,7 +151,7 @@ main();
 
 ## Features
 
--   Detects compression formats (Gzip, Brotli)
+-   Detects compression formats (Gzip, Brotli, Zstd)
 -   Supports code evaluation
 -   Handles symlinks
 -   Extracts binaries from all operating systems

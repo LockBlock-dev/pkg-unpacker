@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { CompressionType, type Props } from "./types.js";
 import Unpacker from "./unpacker.js";
+import { zstdDecompress } from "./utils.js";
 
 describe("pkg 5.8.1 (latest) - linux", () => {
     const prelude: Props = {
@@ -153,5 +154,53 @@ describe("pkg 5.8.1 (latest) - windows - gzip", () => {
         );
 
         expect(vfsEntry).toEqual(prelude.vfs[compressedPath]);
+    });
+});
+
+describe("pkg 6.23.0 - linux - zstd", () => {
+    const prelude: Props = {
+        vfs: {
+            "0/1/2/3": { "0": [0, 418], "3": [418, 95] },
+            "0/1/2": { "2": [513, 21], "3": [534, 98] },
+            "0/1": { "2": [632, 16], "3": [648, 98] },
+        },
+        entryPoint: "/snapshot/app/index.js",
+        symlinks: {},
+        filesDict: { "": "0", snapshot: "1", app: "2", "index.js": "3" },
+        doCompress: CompressionType.ZSTD,
+    };
+
+    test("can uncompress path", () => {
+        const unpacker = new Unpacker("N/A", prelude, -1);
+
+        const compressedPath = "0/1/2/3";
+        const uncompressedPath = unpacker["toOriginal"](compressedPath);
+        const expectedPath = prelude.entryPoint;
+
+        expect(uncompressedPath).toBe(expectedPath);
+    });
+
+    test("can find VFS entry", () => {
+        const unpacker = new Unpacker("N/A", prelude, -1);
+
+        const compressedPath = "0/1/2/3";
+        const vfsEntry = unpacker["findVirtualFileSystemEntry"](
+            unpacker["toOriginal"](compressedPath),
+        );
+
+        expect(vfsEntry).toEqual(prelude.vfs[compressedPath]);
+    });
+
+    test("can decompress zstd", async () => {
+        const blob = Buffer.from(
+            "KLUv/SArWQEAeyJtb2RlIjozMzE4OCwic2l6ZSI6MjgsImlzRmlsZVZhbHVlIjp0cnVlfQ==",
+            "base64",
+        );
+
+        const decompressed = await zstdDecompress(blob);
+
+        expect(decompressed.toString("utf-8")).toBe(
+            '{"mode":33188,"size":28,"isFileValue":true}',
+        );
     });
 });

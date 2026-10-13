@@ -7,7 +7,7 @@ export const OLD_SEPARATOR = "$";
 export const SEPARATOR = "/";
 
 export const RAW_PROPS_REGEX = new RegExp(
-    /\{.*}\n,\n".*"\n,\n\{.*}(?:\n,\n\{.*}\n,\n([012]))?/g,
+    /\{.*}\n,\n".*"\n,\n\{.*}(?:\n,\n\{.*}\n,\n(\d))?/g,
 );
 
 // Marker of the payload offset line in pkg binaries.

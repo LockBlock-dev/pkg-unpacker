@@ -2,6 +2,7 @@ export enum CompressionType {
     NONE,
     GZIP,
     BROTLI,
+    ZSTD,
 }
 
 export enum StoreType {

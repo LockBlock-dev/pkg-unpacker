@@ -14,7 +14,7 @@ import {
 } from "./constants.js";
 import { UnpackerReadError } from "./errors.js";
 import { CompressionType, StoreType, type Props } from "./types.js";
-import { gunzip, brotliDecompress } from "./utils.js";
+import { gunzip, brotliDecompress, zstdDecompress } from "./utils.js";
 
 const EMPTY_PROPS: Props = {
     vfs: {},
@@ -76,6 +76,16 @@ class Unpacker {
 
             const props = Unpacker.initProps(rawProps[0].split("\n,\n"));
 
+            if (
+                props.doCompress !== CompressionType.NONE &&
+                props.doCompress !== CompressionType.GZIP &&
+                props.doCompress !== CompressionType.BROTLI &&
+                props.doCompress !== CompressionType.ZSTD
+            )
+                throw new UnpackerReadError(
+                    `Unsupported compression: ${props.doCompress}.`,
+                );
+
             let markerIdx = tail.indexOf(PAYLOAD_MARKER);
             let file: Buffer;
 
@@ -96,11 +106,17 @@ class Unpacker {
                 lineEnd === -1 ? undefined : lineEnd,
             );
 
-            const payloadPosition = Number(
+            let payloadPosition = Number(
                 payload.toString().match(/\d+/)?.[0] ?? -1,
             );
 
-            if (payloadPosition === -1)
+            if (payloadPosition <= 0)
+                payloadPosition = await Unpacker.discoverPayloadPosition(
+                    handle,
+                    props,
+                );
+
+            if (payloadPosition <= 0)
                 throw new UnpackerReadError("Cannot find the pkg payload!");
 
             return new Unpacker(filePath, props, payloadPosition);
@@ -144,6 +160,60 @@ class Unpacker {
                 ...EMPTY_PROPS,
             },
         );
+    }
+
+    private static async discoverPayloadPosition(
+        fd: FileHandle,
+        props: Props,
+    ) {
+        // Fallback for binaries whose placeholder was left unpatched: scan
+        // for padded numbers and keep the one that decodes a stat entry.
+        const { size } = await fd.stat();
+        const file = Buffer.alloc(size);
+
+        await fd.read({ buffer: file, offset: 0, length: size, position: 0 });
+
+        const candidates = new Set<number>();
+        const pattern = /[0-9]{5,10} {2,}/g;
+        const text = file.toString("latin1");
+        let match: RegExpExecArray | null;
+
+        while ((match = pattern.exec(text)) !== null) {
+            const digits = match[0]?.trim();
+            if (digits !== undefined) candidates.add(Number(digits));
+        }
+
+        for (const candidate of candidates) {
+            for (const entry of Object.values(props.vfs)) {
+                const range = entry[StoreType.STAT.toString()];
+                if (!range) continue;
+
+                try {
+                    const raw = file.subarray(
+                        candidate + range[0],
+                        candidate + range[0] + range[1],
+                    );
+
+                    let text: string;
+
+                    if (props.doCompress === CompressionType.GZIP)
+                        text = (await gunzip(raw)).toString("utf-8");
+                    else if (props.doCompress === CompressionType.BROTLI)
+                        text = (await brotliDecompress(raw)).toString("utf-8");
+                    else if (props.doCompress === CompressionType.ZSTD)
+                        text = (await zstdDecompress(raw)).toString("utf-8");
+                    else text = raw.toString("utf-8");
+
+                    JSON.parse(text);
+
+                    return candidate;
+                } catch {
+                    // Not a payload position, try the next candidate.
+                }
+            }
+        }
+
+        return -1;
     }
 
     constructor(filePath: string, props: Props, payloadPosition: number) {
@@ -309,6 +379,8 @@ class Unpacker {
                 return await gunzip(buf);
             else if (this.props.doCompress === CompressionType.BROTLI)
                 return await brotliDecompress(buf);
+            else if (this.props.doCompress === CompressionType.ZSTD)
+                return await zstdDecompress(buf);
         } catch (e) {
             // Entry stored raw: fall back to the uncompressed bytes.
             console.debug(
