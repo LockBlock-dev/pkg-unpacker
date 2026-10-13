@@ -1,18 +1,26 @@
 {
     "name": "pkg-unpacker",
-    "version": "2.2.0",
+    "version": "2.3.0",
     "description": "Unpack any pkg application",
     "private": true,
     "type": "module",
     "module": "src/main.ts",
+    "main": "dist-node/main.js",
+    "exports": {
+        ".": "./dist-node/main.js",
+        "./unpacker": "./dist-node/unpacker.js"
+    },
     "author": "LockBlock-dev",
     "license": "MIT",
     "scripts": {
         "start": "bun src/main.ts",
+        "start:node": "node dist-node/main.js",
         "build": "bun build ./src/main.ts --outdir ./dist --target bun",
+        "build:node": "tsc -p tsconfig.node.json",
         "compile": "bun build ./src/main.ts --compile --outfile pkg-unpacker",
         "test": "bun test",
-        "typecheck": "bun check"
+        "typecheck": "bun check",
+        "typecheck:node": "tsc -p tsconfig.node.json --noEmit"
     },
     "repository": {
         "type": "git",
@@ -23,6 +31,7 @@
     },
     "devDependencies": {
         "@types/bun": "latest",
+        "@types/node": "^26.6.5",
         "typescript": "^7.0.2"
     }
 }

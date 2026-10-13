@@ -1,0 +1,18 @@
+{
+    // Node.js emit config. Extends the Bun-first base config, overriding
+    // bundler-only options that forbid emit. Tests are Bun-only
+    // (bun:test) and excluded here.
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "module": "NodeNext",
+        "moduleResolution": "NodeNext",
+        "allowImportingTsExtensions": false,
+        "types": ["node"],
+        "noEmit": false,
+        "declaration": true,
+        "outDir": "./dist-node",
+        "rootDir": "./src"
+    },
+    "include": ["src"],
+    "exclude": ["src/**/*.test.ts"]
+}

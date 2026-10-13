@@ -9,10 +9,10 @@ import {
     SEPARATOR,
     RAW_PROPS_REGEX,
     OLD_SEPARATOR,
-} from "./constants";
-import { UnpackerReadError } from "./errors";
-import { CompressionType, StoreType, type Props } from "./types";
-import { gunzip, brotliDecompress } from "./utils";
+} from "./constants.js";
+import { UnpackerReadError } from "./errors.js";
+import { CompressionType, StoreType, type Props } from "./types.js";
+import { gunzip, brotliDecompress } from "./utils.js";
 
 const EMPTY_PROPS: Props = {
     vfs: {},

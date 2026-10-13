@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import { CompressionType, type Props } from "./types";
-import Unpacker from "./unpacker";
+import { CompressionType, type Props } from "./types.js";
+import Unpacker from "./unpacker.js";
 
 describe("pkg 5.8.1 (latest) - linux", () => {
     const prelude: Props = {

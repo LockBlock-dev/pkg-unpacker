@@ -65,6 +65,21 @@ Or run the source directly:
 bun src/main.ts -i ./pkg_app -o ./unpacked
 ```
 
+### Node.js compatibility
+
+The `src/` code (excluding tests, which are Bun-only via `bun:test`) also runs on Node.js. Relative imports use `.js` extensions so both runtimes resolve them.
+
+```sh
+npm run build:node   # or: bun run build:node  -> emits to dist-node/
+node dist-node/main.js -i ./pkg_app -o ./unpacked
+```
+
+As a library on Node.js:
+
+```js
+import Unpacker from "pkg-unpacker/unpacker";
+```
+
 Here’s an overview of the `help` command output:
 
 ```console
