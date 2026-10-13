@@ -1,7 +1,7 @@
-import test, { describe } from "node:test";
-import Unpacker from "./unpacker";
+import { describe, expect, test } from "bun:test";
+
 import { CompressionType, type Props } from "./types";
-import assert from "node:assert/strict";
+import Unpacker from "./unpacker";
 
 describe("pkg 5.8.1 (latest) - linux", () => {
     const prelude: Props = {
@@ -23,7 +23,7 @@ describe("pkg 5.8.1 (latest) - linux", () => {
             prelude.entryPoint,
         );
 
-        assert.deepStrictEqual(prelude.vfs[prelude.entryPoint], vfsEntry);
+        expect(vfsEntry).toEqual(prelude.vfs[prelude.entryPoint]);
     });
 });
 
@@ -47,7 +47,7 @@ describe("pkg 5.8.1 (latest) - linux - gzip", () => {
         const uncompressedPath = unpacker["toOriginal"](compressedPath);
         const expectedPath = prelude.entryPoint;
 
-        assert.equal(uncompressedPath, expectedPath);
+        expect(uncompressedPath).toBe(expectedPath);
     });
 
     test("can find VFS entry", () => {
@@ -58,7 +58,7 @@ describe("pkg 5.8.1 (latest) - linux - gzip", () => {
             unpacker["toOriginal"](compressedPath),
         );
 
-        assert.deepStrictEqual(prelude.vfs[compressedPath], vfsEntry);
+        expect(vfsEntry).toEqual(prelude.vfs[compressedPath]);
     });
 });
 
@@ -82,7 +82,7 @@ describe("pkg 5.2.0 - linux - gzip", () => {
         const uncompressedPath = unpacker["toOriginal"](compressedPath);
         const expectedPath = prelude.entryPoint;
 
-        assert.equal(uncompressedPath, expectedPath);
+        expect(uncompressedPath).toBe(expectedPath);
     });
 
     test("can find VFS entry", () => {
@@ -93,7 +93,7 @@ describe("pkg 5.2.0 - linux - gzip", () => {
             unpacker["toOriginal"](compressedPath),
         );
 
-        assert.deepStrictEqual(prelude.vfs[compressedPath], vfsEntry);
+        expect(vfsEntry).toEqual(prelude.vfs[compressedPath]);
     });
 });
 
@@ -117,7 +117,7 @@ describe("pkg 5.8.1 (latest) - windows", () => {
             prelude.entryPoint,
         );
 
-        assert.deepStrictEqual(prelude.vfs[prelude.entryPoint], vfsEntry);
+        expect(vfsEntry).toEqual(prelude.vfs[prelude.entryPoint]);
     });
 });
 
@@ -141,7 +141,7 @@ describe("pkg 5.8.1 (latest) - windows - gzip", () => {
         const uncompressedPath = unpacker["toOriginal"](compressedPath);
         const expectedPath = prelude.entryPoint;
 
-        assert.equal(uncompressedPath, expectedPath);
+        expect(uncompressedPath).toBe(expectedPath);
     });
 
     test("can find VFS entry", () => {
@@ -152,6 +152,6 @@ describe("pkg 5.8.1 (latest) - windows - gzip", () => {
             unpacker["toOriginal"](compressedPath),
         );
 
-        assert.deepStrictEqual(prelude.vfs[compressedPath], vfsEntry);
+        expect(vfsEntry).toEqual(prelude.vfs[compressedPath]);
     });
 });

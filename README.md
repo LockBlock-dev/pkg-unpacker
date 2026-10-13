@@ -28,16 +28,25 @@ As of this writing, **pkg-unpacker** supports the following tools:
 
 ## Installation
 
-1. Install [Node.js](https://nodejs.org/).
+1. Install [Bun](https://bun.sh/).
 2. Download or clone the project.
 3. Navigate to the project directory.
 4. Install the dependencies:
     ```sh
-    npm install
+    bun install
     ```
-5. Build the project:
+5. (Optional) Verify the project:
     ```sh
-    npm run build
+    bun run typecheck
+    bun test
+    ```
+6. (Optional) Build the project:
+    ```sh
+    bun run build
+    ```
+    Or compile to a single executable:
+    ```sh
+    bun run compile
     ```
 
 ## Usage
@@ -47,7 +56,13 @@ As of this writing, **pkg-unpacker** supports the following tools:
 To start the application, run:
 
 ```sh
-npm start
+bun run start -- -i ./pkg_app -o ./unpacked
+```
+
+Or run the source directly:
+
+```sh
+bun src/main.ts -i ./pkg_app -o ./unpacked
 ```
 
 Here’s an overview of the `help` command output:
@@ -67,19 +82,19 @@ Options:
 -   Unpack a UNIX application:
 
 ```console
-$ npm start -- -i ./pkg_app -o ./unpacked
+$ bun run start -- -i ./pkg_app -o ./unpacked
 ```
 
 -   Unpack a Windows application:
 
 ```console
-$ npm start -- -i ./pkg_app.exe -o ./unpacked
+$ bun run start -- -i ./pkg_app.exe -o ./unpacked
 ```
 
 -   Unpack a UNIX application and run it:
 
 ```console
-$ npm start -- -i ./pkg_app -o ./unpacked --run
+$ bun run start -- -i ./pkg_app -o ./unpacked --run
 ```
 
 ### As a library

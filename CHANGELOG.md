@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-10-13
+
+### Changed
+
+-   Migrate runtime and toolchain from Node.js/npm to Bun
+-   Bump `commander` from `^13.1.0` to `^15.0.0` and `typescript` from `^5.8.2` to `^7.0.2`, replace `@types/node` with `@types/bun`
+-   Update `tsconfig.json` to the Bun recommended setup (`Preserve`/`bundler`, stricter checks)
+-   Migrate tests from `node:test` to `bun:test`
+-   Fix strict type errors revealed by TypeScript 7 (`noUncheckedIndexedAccess`)
+-   Update install/usage docs to Bun
+
 ## [2.1.1] - 2025-05-30
 
 ### Added

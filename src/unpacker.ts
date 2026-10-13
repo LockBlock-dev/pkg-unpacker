@@ -42,9 +42,9 @@ class Unpacker {
 
     static async create(filePath: string) {
         const binary = await fs.readFile(filePath, { encoding: "utf-8" });
-        let rawProps = binary.match(RAW_PROPS_REGEX);
+        const rawProps = binary.match(RAW_PROPS_REGEX);
 
-        if (!rawProps || !rawProps.length)
+        if (!rawProps?.length || !rawProps[0])
             throw new UnpackerReadError(
                 "Error while reading the binary props!",
             );
@@ -74,15 +74,24 @@ class Unpacker {
         if (rawProps.length < Object.keys(propsMapping).length - 2)
             throw new UnpackerReadError("Missing required props!");
 
-        const transforms = Object.entries(propsMapping);
+        const transforms = Object.entries(propsMapping) as Array<
+            [keyof Props, (prop: string) => Props[keyof Props]]
+        >;
 
         return rawProps.reduce<Props>(
             (result, rawProp, idx) => {
-                const [key, transform] = transforms[idx];
+                const entry = transforms[idx];
+
+                if (!entry)
+                    throw new UnpackerReadError(
+                        `Missing transform at index ${idx}.`,
+                    );
+
+                const [key, transform] = entry;
 
                 try {
-                    //@ts-expect-error TypeScript issue
-                    result[key] = transform(rawProp);
+                    (result as unknown as Record<string, unknown>)[key] =
+                        transform(rawProp);
                 } catch {
                     throw new UnpackerReadError(
                         `Error parsing ${key} at index ${idx}.`,
@@ -107,7 +116,7 @@ class Unpacker {
 
         let [firstEntry] = Object.keys(this.props.vfs);
 
-        if (firstEntry.includes(OLD_SEPARATOR)) this.separator = OLD_SEPARATOR;
+        if (firstEntry?.includes(OLD_SEPARATOR)) this.separator = OLD_SEPARATOR;
         else this.separator = props.doCompress ? SEPARATOR : path.sep;
 
         this.nativeSeprator = this.props.entryPoint.includes(C_DISK)
@@ -122,7 +131,7 @@ class Unpacker {
     private uppercaseDriveLetter(f: string) {
         if (f.slice(1, 3) !== ":\\") return f;
 
-        return f[0].toUpperCase() + f.slice(1);
+        return f.charAt(0).toUpperCase() + f.slice(1);
     }
 
     private removeTrailingSlashes(f: string) {
@@ -348,17 +357,23 @@ class Unpacker {
                 );
 
             if (
-                !(StoreType.BLOB.toString() in vfsEntry) &&
-                !(StoreType.CONTENT.toString() in vfsEntry)
+                !vfsEntry ||
+                (!(StoreType.BLOB.toString() in vfsEntry) &&
+                    !(StoreType.CONTENT.toString() in vfsEntry))
             )
                 // Ignore directories and file info
                 continue;
 
+            const range =
+                vfsEntry[StoreType.CONTENT.toString()] ||
+                vfsEntry[StoreType.BLOB.toString()];
+
+            if (!range) continue;
+
             let blob = await this.readFile(
                 fd,
                 // Prefer text content over blob
-                vfsEntry[StoreType.CONTENT.toString()] ||
-                    vfsEntry[StoreType.BLOB.toString()],
+                range,
             );
 
             if (!blob) {
