@@ -10,17 +10,28 @@ import {
     OLD_SEPARATOR,
     PAYLOAD_MARKER,
     PROPS_SCAN_WINDOW,
-} from "./constants.js";
-import { UnpackerReadError } from "./errors.js";
+} from "../constants.js";
+import { UnpackerReadError } from "../errors.js";
 import {
     CompressionType,
     StoreType,
     type FileKind,
+    type FormatUnpacker,
     type Props,
+    type UnpackFormat,
     type UnpackOptions,
     type UnpackResult,
-} from "./types.js";
-import { gunzip, brotliDecompress, zstdDecompress, isBun, parseStatMode } from "./utils.js";
+} from "../types.js";
+import {
+    gunzip,
+    brotliDecompress,
+    zstdDecompress,
+    isBun,
+    parseStatMode,
+    isOutside,
+    createWarnings,
+    ensureDir,
+} from "../utils.js";
 
 const EMPTY_PROPS: Props = {
     vfs: {},
@@ -38,7 +49,8 @@ const propsMapping: { [K in keyof Props]: (prop: string) => Props[K] } = {
     doCompress: Number,
 };
 
-class Unpacker {
+class PkgUnpacker implements FormatUnpacker {
+    public readonly format: UnpackFormat = "pkg";
     private filePath: string;
     private payloadPosition: number;
     private symlinksEntries: Array<[string, string]>;
@@ -80,7 +92,7 @@ class Unpacker {
                     "Error while reading the binary props!",
                 );
 
-            const props = Unpacker.initProps(rawProps[0].split("\n,\n"));
+            const props = PkgUnpacker.initProps(rawProps[0].split("\n,\n"));
 
             if (
                 props.doCompress !== CompressionType.NONE &&
@@ -116,7 +128,7 @@ class Unpacker {
             );
 
             if (payloadPosition <= 0)
-                payloadPosition = await Unpacker.discoverPayloadPosition(
+                payloadPosition = await PkgUnpacker.discoverPayloadPosition(
                     handle,
                     props,
                 );
@@ -124,7 +136,7 @@ class Unpacker {
             if (payloadPosition <= 0)
                 throw new UnpackerReadError("Cannot find the pkg payload!");
 
-            return new Unpacker(filePath, props, payloadPosition);
+            return new PkgUnpacker(filePath, props, payloadPosition);
         } finally {
             await handle.close();
         }
@@ -424,10 +436,7 @@ class Unpacker {
     private createdDirs = new Set<string>();
 
     private async ensureDir(dir: string) {
-        if (!this.createdDirs.has(dir)) {
-            await fs.mkdir(dir, { recursive: true });
-            this.createdDirs.add(dir);
-        }
+        await ensureDir(dir, this.createdDirs);
     }
 
     private async writeFile(path_: string, blob: Buffer<ArrayBufferLike>) {
@@ -499,11 +508,7 @@ class Unpacker {
         const files: UnpackResult["files"] = [];
         const skipped: UnpackResult["skipped"] = [];
         const links: UnpackResult["symlinks"] = [];
-        const warnings: string[] = [];
-        const warn = (message: string) => {
-            warnings.push(message);
-            console.warn(message);
-        };
+        const { warnings, warn } = createWarnings();
 
         try {
             const jobs: Array<{
@@ -521,10 +526,6 @@ class Unpacker {
                 outLink: string;
                 outTarget: string;
             }> = [];
-
-            const outside = (out: string) =>
-                out !== outputPath &&
-                !out.startsWith(outputPath + path.sep);
 
             for (let path_ in this.props.vfs) {
                 if (this.props.doCompress)
@@ -553,7 +554,7 @@ class Unpacker {
                 if (symlinkTarget !== undefined) {
                     const outLink = this.toOutPath(path_, outputPath);
 
-                    if (outside(outLink)) {
+                    if (isOutside(outLink, outputPath)) {
                         skipped.push({
                             path: outLink,
                             reason: "outside output directory",
@@ -574,7 +575,7 @@ class Unpacker {
 
                 const outPath = this.toOutPath(path_, outputPath);
 
-                if (outside(outPath)) {
+                if (isOutside(outPath, outputPath)) {
                     skipped.push({
                         path: outPath,
                         reason: "outside output directory",
@@ -683,7 +684,7 @@ class Unpacker {
                         files.push({
                             path: job.outPath,
                             size: blob.length,
-                            kind: Unpacker.classifyKind(
+                            kind: PkgUnpacker.classifyKind(
                                 job.content,
                                 path.extname(job.outPath).toLowerCase(),
                             ),
@@ -738,6 +739,7 @@ class Unpacker {
             outputDir: outputPath,
             entrypoint: this.props.entryPoint,
             compression: CompressionType[this.props.doCompress] ?? "UNKNOWN",
+            format: this.format,
             files,
             skipped,
             symlinks: links,
@@ -746,4 +748,4 @@ class Unpacker {
     }
 }
 
-export default Unpacker;
+export default PkgUnpacker;

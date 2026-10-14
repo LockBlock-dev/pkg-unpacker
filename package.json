@@ -1,17 +1,22 @@
 {
     "name": "pkg-unpacker",
-    "version": "2.8.0",
-    "description": "Unpack any pkg application",
+    "version": "3.1.0",
+    "description": "Unpack pkg, nexe, caxa, Node.js SEA and Bun single-file binaries",
     "private": true,
     "type": "module",
-    "module": "src/main.ts",
+    "module": "src/index.ts",
     "bin": {
         "pkg-unpacker": "./src/main.ts"
     },
-    "main": "dist-node/main.js",
+    "main": "dist-node/index.js",
     "exports": {
-        ".": "./dist-node/main.js",
-        "./unpacker": "./dist-node/unpacker.js"
+        ".": "./dist-node/index.js",
+        "./dispatch": "./dist-node/dispatch.js",
+        "./pkg/unpacker": "./dist-node/pkg/unpacker.js",
+        "./sea/unpacker": "./dist-node/sea/unpacker.js",
+        "./bun/unpacker": "./dist-node/bun/unpacker.js",
+        "./nexe/unpacker": "./dist-node/nexe/unpacker.js",
+        "./caxa/unpacker": "./dist-node/caxa/unpacker.js"
     },
     "author": "LockBlock-dev",
     "license": "MIT",

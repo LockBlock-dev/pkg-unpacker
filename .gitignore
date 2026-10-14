@@ -2,4 +2,3 @@ node_modules
 unpacked/
 dist/
 dist-node/
-tests/

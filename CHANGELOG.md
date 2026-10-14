@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-10-14
+
+### Changed
+
+-   CLI is multi-format throughout: program description, `--format` help (`Binary format to unpack (default: auto-detect)`) and `--run` help (`pkg binaries on Node.js only`); the pkg-specific `--run`-under-Bun guard now lives in `PkgUnpacker` so `sea`/`bun`/`nexe`/`caxa` unpack with a warning instead of a hard CLI failure
+-   `src/main.ts` shebang is `#!/usr/bin/env node` so the `dist-node/main.js` entrypoint runs directly under Node.js; `bun src/main.ts` keeps working
+-   README covers all formats (CLI `--format` examples, Bun and Node.js entrypoints, per-format library examples) and drops the `## Credits` section; the `pkg-unpacker` name is kept for legacy
+
+## [3.0.0] - 2026-10-14
+
+### Added
+
+-   `NexeUnpacker`: unpack nexe binaries (ZIP payload, old JSON-manifest layout included)
+-   `CaxaUnpacker`: unpack caxa self-extracting gzip-tar binaries
+-   `SeaUnpacker`: unpack Node.js single-executable binaries (source mains, raw assets, snapshot mains reported unrecoverable)
+-   `BunUnpacker`: unpack Bun single-file executables (bundled source, raw assets, bytecode bundles reported unrecoverable)
+-   Multi-format architecture: `FormatUnpacker` interface, format detection and dispatcher, `--format` flag
+
+### Changed
+
+-   **Breaking:** `Unpacker` is now `PkgUnpacker` and lives in `src/pkg/unpacker.ts`; use `createUnpacker` for multi-format binaries
+-   **Breaking:** the package root now exports the library (`src/index.ts` re-exporting the dispatcher) instead of the CLI runner; the `pkg-unpacker` bin still runs the CLI. New subpaths: `./dispatch`, `./sea/unpacker`, `./bun/unpacker`, `./nexe/unpacker`, `./caxa/unpacker`
+-   Shared unpack helpers (`createResultCollector`, `createOutputWriter`, `writeSymlinkOut`, `applyMode`, `stripPrefix`, `ensureDir`, `isOutside`) replace the per-format `warn` closures, inline outside-checks, inline `mkdir`s and `stripName` variants
+-   Test fixtures live in `tests/helpers.ts` so `dist-node/` no longer ships `src/*/fixtures.js`
+
+### Fixed
+
+-   Mask caxa tar modes with `0o777` at parse time so crafted binaries cannot set setuid/setgid/sticky bits via `chmod`
+-   Skip `chmod` for files that were not written (outside output directory or duplicate path) in nexe/caxa unpackers
+
 ## [2.8.0] - 2026-10-13
 
 ### Added

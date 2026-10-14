@@ -42,6 +42,7 @@ export interface UnpackResult {
     outputDir: string;
     entrypoint: string;
     compression: string;
+    format: UnpackFormat;
     files: UnpackedFile[];
     skipped: SkippedEntry[];
     symlinks: CreatedSymlink[];
@@ -50,4 +51,18 @@ export interface UnpackResult {
 
 export interface UnpackOptions {
     json?: boolean;
+    format?: FormatOption;
+}
+
+export type UnpackFormat = "pkg" | "sea" | "bun" | "nexe" | "caxa";
+
+export type FormatOption = UnpackFormat | "auto";
+
+export interface FormatUnpacker {
+    readonly format: UnpackFormat;
+    unpack(
+        outputFolder?: string,
+        shouldRun?: boolean,
+        options?: UnpackOptions,
+    ): Promise<UnpackResult>;
 }

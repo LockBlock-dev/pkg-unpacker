@@ -1,10 +1,10 @@
-import { Command } from "commander";
+import { Command, Option } from "commander";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-import Unpacker from "./unpacker.js";
-import { isBun } from "./utils.js";
+import { createUnpacker } from "./dispatch.js";
+import type { FormatOption } from "./types.js";
 import { VERSION } from "./version.js";
 
 class Cli {
@@ -17,6 +17,9 @@ class Cli {
     private setup() {
         this.program
             .name("pkg-unpacker")
+            .description(
+                "Unpack pkg, nexe, caxa, Node.js SEA and Bun single-file binaries. The format is auto-detected by default.",
+            )
             .version(VERSION)
             .requiredOption(
                 "-i, --input <file>",
@@ -27,8 +30,20 @@ class Cli {
                 "Specify the output folder path",
                 ".",
             )
-            .option("--run", "Run the unpacked binary", false)
-            .option("--json", "Output the unpack result as JSON", false);
+            .option(
+                "--run",
+                "Run the unpacked entrypoint (pkg binaries on Node.js only)",
+                false,
+            )
+            .option("--json", "Output the unpack result as JSON", false)
+            .addOption(
+                new Option(
+                    "--format <format>",
+                    "Binary format to unpack (default: auto)",
+                )
+                    .default("auto")
+                    .choices(["pkg", "sea", "bun", "nexe", "caxa", "auto"]),
+            );
 
         this.program.parse();
 
@@ -36,13 +51,6 @@ class Cli {
 
         if (!options.input || !options.output) {
             console.error("Both -i (input) and -o (output) are required.");
-            process.exit(1);
-        }
-
-        if (options.run && isBun()) {
-            console.error(
-                "--run is not supported under Bun: the entrypoint is V8 bytecode and Bun runs JavaScriptCore.",
-            );
             process.exit(1);
         }
 
@@ -59,13 +67,15 @@ class Cli {
             outputPath,
             shouldRun: options.run as boolean,
             json: options.json as boolean,
+            format: options.format as FormatOption,
         };
     }
 
     public async run() {
-        const { inputPath, outputPath, shouldRun, json } = this.setup();
+        const { inputPath, outputPath, shouldRun, json, format } =
+            this.setup();
 
-        const unpacker = await Unpacker.create(inputPath);
+        const unpacker = await createUnpacker(inputPath, format);
         const result = await unpacker.unpack(outputPath, shouldRun, { json });
 
         if (json) console.log(JSON.stringify(result, null, 2));

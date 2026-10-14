@@ -4,9 +4,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 
-import { CompressionType, type Props } from "./types.js";
-import Unpacker from "./unpacker.js";
-import { zstdDecompress, parseStatMode } from "./utils.js";
+import { CompressionType, type Props } from "../types.js";
+import PkgUnpacker from "./unpacker.js";
+import { zstdDecompress, parseStatMode } from "../utils.js";
 
 describe("pkg 5.8.1 (latest) - linux", () => {
     const prelude: Props = {
@@ -22,7 +22,7 @@ describe("pkg 5.8.1 (latest) - linux", () => {
     };
 
     test("can find VFS entry", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const vfsEntry = unpacker["findVirtualFileSystemEntry"](
             prelude.entryPoint,
@@ -46,7 +46,7 @@ describe("pkg 5.8.1 (latest) - linux - gzip", () => {
     };
 
     test("can uncompress path", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const uncompressedPath = unpacker["toOriginal"](compressedPath);
@@ -56,7 +56,7 @@ describe("pkg 5.8.1 (latest) - linux - gzip", () => {
     });
 
     test("can find VFS entry", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const vfsEntry = unpacker["findVirtualFileSystemEntry"](
@@ -81,7 +81,7 @@ describe("pkg 5.2.0 - linux - gzip", () => {
     };
 
     test("can uncompress path", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0$1$2$3";
         const uncompressedPath = unpacker["toOriginal"](compressedPath);
@@ -91,7 +91,7 @@ describe("pkg 5.2.0 - linux - gzip", () => {
     });
 
     test("can find VFS entry", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0$1$2$3";
         const vfsEntry = unpacker["findVirtualFileSystemEntry"](
@@ -116,7 +116,7 @@ describe("pkg 5.8.1 (latest) - windows", () => {
     };
 
     test("can find VFS entry", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const vfsEntry = unpacker["findVirtualFileSystemEntry"](
             prelude.entryPoint,
@@ -140,7 +140,7 @@ describe("pkg 5.8.1 (latest) - windows - gzip", () => {
     };
 
     test("can uncompress path", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const uncompressedPath = unpacker["toOriginal"](compressedPath);
@@ -150,7 +150,7 @@ describe("pkg 5.8.1 (latest) - windows - gzip", () => {
     });
 
     test("can find VFS entry", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const vfsEntry = unpacker["findVirtualFileSystemEntry"](
@@ -175,7 +175,7 @@ describe("pkg 6.23.0 - linux - zstd", () => {
     };
 
     test("can uncompress path", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const uncompressedPath = unpacker["toOriginal"](compressedPath);
@@ -185,7 +185,7 @@ describe("pkg 6.23.0 - linux - zstd", () => {
     });
 
     test("can find VFS entry", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const vfsEntry = unpacker["findVirtualFileSystemEntry"](
@@ -215,6 +215,10 @@ describe("parseStatMode", () => {
         expect(parseStatMode(Buffer.from('{"mode":16877}'))).toBe(0o755);
     });
 
+    test("masks setuid/setgid/sticky bits", () => {
+        expect(parseStatMode(Buffer.from('{"mode":36333}'))).toBe(0o755);
+    });
+
     test("rejects garbage", () => {
         expect(parseStatMode(Buffer.from("not json"))).toBeUndefined();
         expect(parseStatMode(Buffer.from('{"size":3}'))).toBeUndefined();
@@ -231,7 +235,7 @@ describe("symlinks", () => {
     };
 
     test("precomputes link map", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         expect(unpacker["symlinkLinks"].get("/snapshot/link")).toBe(
             "/snapshot/a",
@@ -239,7 +243,7 @@ describe("symlinks", () => {
     });
 
     test("remaps snapshot targets into output", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         expect(unpacker["remapSymlinkTarget"]("/snapshot/a", "/out")).toBe(
             path.join("/out", "a"),
@@ -314,7 +318,7 @@ describe("unpack fidelity", () => {
 
         await fs.writeFile(bin, buildBinary());
 
-        const unpacker = await Unpacker.create(bin);
+        const unpacker = await PkgUnpacker.create(bin);
         const result = await unpacker.unpack(out);
 
         const appPath = path.join(out, "app.js");
@@ -325,6 +329,7 @@ describe("unpack fidelity", () => {
         expect(result.outputDir).toBe(out);
         expect(result.entrypoint).toBe("/snapshot/app.js");
         expect(result.compression).toBe("NONE");
+        expect(result.format).toBe("pkg");
         expect(result.files).toEqual([
             { path: appPath, size: 15, kind: "bytecode" },
         ]);
@@ -366,7 +371,7 @@ describe("yao-pkg 6.3.2 - linux", () => {
     };
 
     test("can find VFS entry", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const vfsEntry = unpacker["findVirtualFileSystemEntry"](
             prelude.entryPoint,
@@ -390,7 +395,7 @@ describe("yao-pkg 6.3.2 - linux - gzip", () => {
     };
 
     test("can uncompress path", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const uncompressedPath = unpacker["toOriginal"](compressedPath);
@@ -400,7 +405,7 @@ describe("yao-pkg 6.3.2 - linux - gzip", () => {
     });
 
     test("can find VFS entry", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const vfsEntry = unpacker["findVirtualFileSystemEntry"](
@@ -425,7 +430,7 @@ describe("pkg 5.8.1 (latest) - linux - brotli", () => {
     };
 
     test("can uncompress path", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const uncompressedPath = unpacker["toOriginal"](compressedPath);
@@ -435,7 +440,7 @@ describe("pkg 5.8.1 (latest) - linux - brotli", () => {
     });
 
     test("can find VFS entry", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const vfsEntry = unpacker["findVirtualFileSystemEntry"](
@@ -460,7 +465,7 @@ describe("yao-pkg 6.23.0 (latest) - linux", () => {
     };
 
     test("can find VFS entry", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const vfsEntry = unpacker["findVirtualFileSystemEntry"](
             prelude.entryPoint,
@@ -484,7 +489,7 @@ describe("yao-pkg 6.23.0 (latest) - linux - gzip", () => {
     };
 
     test("can uncompress path", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const uncompressedPath = unpacker["toOriginal"](compressedPath);
@@ -494,7 +499,7 @@ describe("yao-pkg 6.23.0 (latest) - linux - gzip", () => {
     });
 
     test("can find VFS entry", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const vfsEntry = unpacker["findVirtualFileSystemEntry"](
@@ -519,7 +524,7 @@ describe("yao-pkg 6.23.0 (latest) - linux - brotli", () => {
     };
 
     test("can uncompress path", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const uncompressedPath = unpacker["toOriginal"](compressedPath);
@@ -529,7 +534,7 @@ describe("yao-pkg 6.23.0 (latest) - linux - brotli", () => {
     });
 
     test("can find VFS entry", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const vfsEntry = unpacker["findVirtualFileSystemEntry"](
@@ -554,7 +559,7 @@ describe("yao-pkg 6.23.0 (latest) - windows - gzip", () => {
     };
 
     test("can uncompress path", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const uncompressedPath = unpacker["toOriginal"](compressedPath);
@@ -564,7 +569,7 @@ describe("yao-pkg 6.23.0 (latest) - windows - gzip", () => {
     });
 
     test("can find VFS entry", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         const compressedPath = "0/1/2/3";
         const vfsEntry = unpacker["findVirtualFileSystemEntry"](
@@ -577,7 +582,7 @@ describe("yao-pkg 6.23.0 (latest) - windows - gzip", () => {
 
 describe("--run", () => {
     test("unpack refuses --run under Bun", async () => {
-        const unpacker = new Unpacker("N/A", {
+        const unpacker = new PkgUnpacker("N/A", {
             vfs: {},
             entryPoint: "",
             symlinks: {},
@@ -593,12 +598,12 @@ describe("--run", () => {
 
 describe("classifyKind", () => {
     test("labels by store and extension", () => {
-        expect(Unpacker["classifyKind"](false, ".js")).toBe("bytecode");
-        expect(Unpacker["classifyKind"](true, ".js")).toBe("source");
-        expect(Unpacker["classifyKind"](false, ".mjs")).toBe("bytecode");
-        expect(Unpacker["classifyKind"](true, ".png")).toBe("asset");
-        expect(Unpacker["classifyKind"](false, ".png")).toBe("asset");
-        expect(Unpacker["classifyKind"](false, ".json")).toBe("source");
+        expect(PkgUnpacker["classifyKind"](false, ".js")).toBe("bytecode");
+        expect(PkgUnpacker["classifyKind"](true, ".js")).toBe("source");
+        expect(PkgUnpacker["classifyKind"](false, ".mjs")).toBe("bytecode");
+        expect(PkgUnpacker["classifyKind"](true, ".png")).toBe("asset");
+        expect(PkgUnpacker["classifyKind"](false, ".png")).toBe("asset");
+        expect(PkgUnpacker["classifyKind"](false, ".json")).toBe("source");
     });
 });
 
@@ -612,7 +617,7 @@ describe("toOutPath", () => {
     };
 
     test("strips the snapshot root", () => {
-        const unpacker = new Unpacker("N/A", prelude, -1);
+        const unpacker = new PkgUnpacker("N/A", prelude, -1);
 
         expect(unpacker["toOutPath"]("/snapshot/app/index.js", "/out")).toBe(
             path.join("/out", "app", "index.js"),
@@ -623,7 +628,7 @@ describe("toOutPath", () => {
     });
 
     test("normalizes windows separators", () => {
-        const win = new Unpacker(
+        const win = new PkgUnpacker(
             "N/A",
             { ...prelude, entryPoint: "C:\\snapshot\\app\\index.js" },
             -1,
